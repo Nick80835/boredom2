@@ -1,0 +1,6 @@
+alloc var = 1; alloc nick = 8;
+alloc var2 = 3;
+
+if var == var2 {
+    alloc bob = "egg";
+}
