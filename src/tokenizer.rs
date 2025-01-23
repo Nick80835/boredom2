@@ -24,6 +24,9 @@ pub enum Token {
     Equals,
     NotEquals,
     Alloc,
+    Set,
+    Print,
+    ReadLine,
     LineEnd,
     Variable {
         name: String
@@ -85,6 +88,9 @@ impl Tokenizer {
                     "is" => Token::Is,
                     "else" => Token::Else,
                     "alloc" => Token::Alloc,
+                    "set" => Token::Set,
+                    "print" => Token::Print,
+                    "readln" => Token::ReadLine,
                     _ => Token::Variable{ name: id.to_string() }
                 }
             }

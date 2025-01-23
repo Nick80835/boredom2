@@ -1,10 +1,12 @@
 use std::env;
 use std::fs::read_to_string;
 
+mod astgen;
+mod interpreter;
 mod tokenizer;
 use astgen::ASTGenerator;
+use interpreter::Interpreter;
 use tokenizer::{Tokenizer, Token};
-mod astgen;
 
 fn read_file(filename: &str) -> Vec<String> {
     let mut out_lines: Vec<String> = vec![];
@@ -43,12 +45,20 @@ fn main() {
     let unraw_tokens = Tokenizer::post_process(raw_tokens);
 
     for token in &unraw_tokens {
-        println!("{:?}", token);
+        //println!("{:?}", token);
     }
 
     let mut astgen = ASTGenerator::init(unraw_tokens);
+    astgen.generate_ast();
 
-    for ast in astgen.generate_ast() {
-        println!("{:?}", ast);
+    for (index, token) in astgen.generated_ast.iter().enumerate() {
+        println!("{} | {:?}", index, token);
+    }
+
+    let mut interpreter = Interpreter::init(astgen.generated_ast.clone());
+
+    while !interpreter.halted {
+        interpreter.execute_one();
+        interpreter.print_state();
     }
 }
