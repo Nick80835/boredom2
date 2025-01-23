@@ -13,7 +13,6 @@ pub struct Interpreter {
     pub halted: bool,
     inst_ptr: usize,
     memory_cells: Vec<Type>,
-    alloc_ptr: usize,
     variable_map: HashMap<String, usize>,
     scope_start_stack: Vec<usize>,
 }
@@ -25,7 +24,6 @@ impl Interpreter {
             halted: false,
             inst_ptr: 0,
             memory_cells: vec![],
-            alloc_ptr: 0,
             variable_map: HashMap::new(),
             scope_start_stack: vec![0],
         }
@@ -37,7 +35,7 @@ impl Interpreter {
         &self.ast_tokens[self.inst_ptr + 1]
     }
     pub fn print_state(&self) {
-        println!("STATE\n{} | {:?}\n{:?}", self.inst_ptr, self.current_inst(), self.memory_cells);
+        println!("STATE\n{} | {:?}\n{:?}\n{:?}", self.inst_ptr, self.current_inst(), self.memory_cells, self.variable_map);
     }
     fn create_new_variable(&mut self, name: String, value: Type) {
         if self.variable_map.get(&name) != None {
@@ -97,6 +95,36 @@ impl Interpreter {
                 else_body_idx: _,
             } => {
                 self.halted = true;
+            }
+            ASTToken {
+                t_type: Statement::Block,
+                arg1: _,
+                arg2: _,
+                body_idx: _,
+                body_extent: _,
+                else_body_idx: _,
+            } => {
+                self.scope_start_stack.push(self.memory_cells.len());
+                self.inst_ptr += 1;
+            }
+            ASTToken {
+                t_type: Statement::BlockEnd,
+                arg1: _,
+                arg2: _,
+                body_idx: _,
+                body_extent: _,
+                else_body_idx: _,
+            } => {
+                if self.memory_cells.len() > 0 {
+                    let invalid_scope_start: usize = self.scope_start_stack.pop().unwrap() - 1;
+
+                    self.variable_map.retain(
+                        |_, v| *v <= invalid_scope_start
+                    );
+                    self.memory_cells.truncate(invalid_scope_start + 1);
+                }
+
+                self.inst_ptr += 1;
             }
             ASTToken {
                 t_type: Statement::Allocate,

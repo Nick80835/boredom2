@@ -5,6 +5,7 @@ if var == var2 {
     alloc bob = "egg";
 }
 if var == 1 {
+    set yolky = "shfhskdjfkf";
     print "wahoo";
 }
 
