@@ -1,69 +1,82 @@
 use crate::tokenizer::Token;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expression {
+pub enum Value {
     IntegerLiteral(u32),
     StringLiteral(String),
-    Bool(bool),
+    BoolLiteral(bool),
     Variable(String),
+    Expression {
+        values: Vec<Value>,
+        operators: Vec<Operator>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Comparison {
+    Equals,
+    NotEquals,
+    MoreThan,
+    LessThan,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Operator {
+    Add,
+    Sub,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Empty,
-    Return,
     Block,
     BlockEnd,
     Allocate,
     Set,
-    Equals,
-    NotEquals,
-    MoreThan,
-    LessThan,
-    Add,
-    Sub,
     DebugPrintCall,
     ReadLineCall,
     EOF,
+    // conditions
+    If(Comparison),
+    While(Comparison),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ASTToken {
     pub t_type: Statement,
     // args for arithmetic
-    pub arg1: Option<Expression>,
-    pub arg2: Option<Expression>,
+    pub arg1: Option<Value>,
+    pub arg2: Option<Value>,
     // args for nested code blocks (if/else)
     pub body_idx: Option<usize>,
     pub body_extent: Option<usize>,
     pub else_body_idx: Option<usize>,
-    pub recurring: bool,
 }
 
 impl ASTToken {
     pub fn empty() -> Self {
         Self {
-            t_type: Statement::Empty, arg1: None, arg2: None, body_idx: None, body_extent: None, else_body_idx: None, recurring: false
+            t_type: Statement::Empty, arg1: None, arg2: None, body_idx: None, body_extent: None, else_body_idx: None
         }
     }
     pub fn of_type(t_type: Statement) -> Self {
         Self {
-            t_type, arg1: None, arg2: None, body_idx: None, body_extent: None, else_body_idx: None, recurring: false
+            t_type, arg1: None, arg2: None, body_idx: None, body_extent: None, else_body_idx: None
         }
     }
-    pub fn with_args(t_type: Statement, arg1: Expression, arg2: Option<Expression>) -> Self {
+    pub fn with_args(t_type: Statement, arg1: Value, arg2: Option<Value>) -> Self {
         Self {
-            t_type, arg1: Some(arg1), arg2: arg2, body_idx: None, body_extent: None, else_body_idx: None, recurring: false
+            t_type, arg1: Some(arg1), arg2: arg2, body_idx: None, body_extent: None, else_body_idx: None
         }
     }
-    pub fn with_args_and_body(t_type: Statement, arg1: Expression, arg2: Option<Expression>, body_idx: usize, else_body_idx: Option<usize>, recurring: bool) -> Self {
+    pub fn with_args_and_body(t_type: Statement, arg1: Value, arg2: Option<Value>, body_idx: usize, else_body_idx: Option<usize>) -> Self {
         Self {
-            t_type, arg1: Some(arg1), arg2: arg2, body_idx: Some(body_idx), body_extent: None, else_body_idx, recurring
+            t_type, arg1: Some(arg1), arg2: arg2, body_idx: Some(body_idx), body_extent: None, else_body_idx
         }
     }
     pub fn new_scope(body_idx: usize) -> Self {
         Self {
-            t_type: Statement::Block, arg1: None, arg2: None, body_idx: Some(body_idx), body_extent: None, else_body_idx: None, recurring: false
+            t_type: Statement::Block, arg1: None, arg2: None, body_idx: Some(body_idx), body_extent: None, else_body_idx: None
         }
     }
 }
@@ -91,62 +104,100 @@ impl ASTGenerator {
     fn get_token(&mut self) -> &Token {
         &self.tokens[self.current_token_idx]
     }
-    fn peek_next_token(&mut self) -> Option<&Token> {
+    fn peek_next_token(&self) -> Option<&Token> {
         if self.current_token_idx < self.tokens.len() {
             Some(&self.tokens[self.current_token_idx + 1])
         } else {
             None
         }
     }
-    fn resolve_variable_read_like_token(token: Token) -> Expression {
+    fn resolve_variable_read_like_token(token: Token) -> Value {
         match token {
-            Token::IntegerLiteral { value } => {
-                Expression::IntegerLiteral(value.to_owned())
-            }
-            Token::StringLiteral { value } => {
-                Expression::StringLiteral(value.to_owned())
-            }
-            Token::BoolTrue => {
-                Expression::Bool(true)
-            }
-            Token::BoolFalse => {
-                Expression::Bool(false)
-            }
-            Token::Variable { name } => {
-                Expression::Variable(name)
-            }
-            _ => {
-                panic!("{:?} passed as value for variable read token!", token)
-            }
+            Token::IntegerLiteral { value } => Value::IntegerLiteral(value.to_owned()),
+            Token::StringLiteral { value } => Value::StringLiteral(value.to_owned()),
+            Token::BoolTrue => Value::BoolLiteral(true),
+            Token::BoolFalse => Value::BoolLiteral(false),
+            Token::Variable { name } => Value::Variable(name),
+            _ => panic!("{:?} passed as value for variable read token!", token),
         }
     }
-    fn resolve_variable_write_like_token(token: Token) -> Expression {
+    fn resolve_value_from_token(token: Token) -> Value {
+        match token {
+            Token::IntegerLiteral { value } => Value::IntegerLiteral(value),
+            Token::StringLiteral { value } => Value::StringLiteral(value),
+            Token::BoolTrue => Value::BoolLiteral(true),
+            Token::BoolFalse => Value::BoolLiteral(false),
+            Token::Variable { name } => Value::Variable(name),
+            _ => panic!("{:?} passed as value for variable read token!", token),
+        }
+    }
+    fn resolve_variable_read_like_expression(tokens: Vec<Token>) -> Value {
+        if tokens.len() < 2 {
+            return ASTGenerator::resolve_value_from_token(tokens.last().unwrap().clone());
+        }
+    
+        let mut value_tokens: Vec<Value> = vec![];
+        let mut operator_tokens: Vec<Operator> = vec![];
+
+        for token in tokens {
+            match token {
+                // values
+                Token::IntegerLiteral { value: _ } => value_tokens.push(ASTGenerator::resolve_variable_read_like_token(token)),
+                Token::StringLiteral { value: _ } => value_tokens.push(ASTGenerator::resolve_variable_read_like_token(token)),
+                Token::BoolTrue => value_tokens.push(ASTGenerator::resolve_variable_read_like_token(token)),
+                Token::BoolFalse => value_tokens.push(ASTGenerator::resolve_variable_read_like_token(token)),
+                Token::Variable { name: _ } => value_tokens.push(ASTGenerator::resolve_variable_read_like_token(token)),
+                // operators
+                Token::Plus => operator_tokens.push(Operator::Add),
+                Token::Minus => operator_tokens.push(Operator::Sub),
+                _ => panic!("{:?} passed as value for variable read token!", token),
+            }
+        }
+
+        assert_eq!(value_tokens.len() - 1, operator_tokens.len());
+        return Value::Expression {
+            values: value_tokens,
+            operators: operator_tokens
+        };
+    }
+    fn resolve_variable_write_like_token(token: Token) -> Value {
         match token {
             Token::Variable { name } => {
-                Expression::Variable(name)
+                Value::Variable(name)
             }
             _ => {
                 panic!("{:?} passed as value for variable write token!", token)
             }
         }
     }
-    fn resolve_comparison_like_token(token: Token) -> Statement {
+    fn resolve_comparison_like_token(token: Token) -> Comparison {
         match token {
-            Token::MoreThan => {
-                Statement::MoreThan
-            }
-            Token::LessThan => {
-                Statement::LessThan
-            }
-            Token::Equals => {
-                Statement::Equals
-            }
-            Token::NotEquals => {
-                Statement::NotEquals
-            }
-            _ => {
-                panic!("{:?} passed as value for comparison-like token!", token)
-            }
+            Token::Equals => Comparison::Equals,
+            Token::NotEquals => Comparison::NotEquals,
+            Token::MoreThan => Comparison::MoreThan,
+            Token::LessThan => Comparison::LessThan,
+            _ => panic!("{:?} passed as value for comparison-like token!", token),
+        }
+    }
+    fn token_is_comparison_like(token: Token) -> bool {
+        match token {
+            Token::Equals |
+            Token::NotEquals |
+            Token::MoreThan |
+            Token::LessThan => true,
+            _ => false,
+        }
+    }
+    fn token_is_scope_like(token: Token) -> bool {
+        match token {
+            Token::ScopeOpen => true,
+            _ => false,
+        }
+    }
+    fn token_is_line_end(token: Token) -> bool {
+        match token {
+            Token::LineEnd => true,
+            _ => false,
         }
     }
     fn insert_root_ast_scope(&mut self, new_token: ASTToken) {
@@ -189,71 +240,101 @@ impl ASTGenerator {
                     self.insert_ast_token_at_end(ASTToken::of_type(Statement::EOF));
                 }
                 Token::If => {
-                    // looking for any Variable/Literal, any comparison token and any Variable/Literal
-                    let first_value_expression: Expression = ASTGenerator::resolve_variable_read_like_token(
+                    // first half
+                    let mut first_value_tokens: Vec<Token> = vec![];
+                    while !ASTGenerator::token_is_comparison_like(self.peek_next_token().unwrap().to_owned()) {
+                        first_value_tokens.push(self.advance_and_get_token().to_owned());
+                    }
+                    let first_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
+                        first_value_tokens
+                    );
+
+                    // comparison
+                    let comparison_operator: Comparison = ASTGenerator::resolve_comparison_like_token(
                         self.advance_and_get_token().to_owned()
                     );
-                    let comparison_statement: Statement = ASTGenerator::resolve_comparison_like_token(
-                        self.advance_and_get_token().to_owned()
+
+                    // second half
+                    let mut second_value_tokens: Vec<Token> = vec![];
+                    while !ASTGenerator::token_is_scope_like(self.peek_next_token().unwrap().to_owned()) {
+                        second_value_tokens.push(self.advance_and_get_token().to_owned());
+                    }
+                    let second_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
+                        second_value_tokens
                     );
-                    let second_value_expression: Expression = ASTGenerator::resolve_variable_read_like_token(
-                        self.advance_and_get_token().to_owned()
-                    );
+
+                    // build token
                     let new_token: ASTToken = ASTToken::with_args_and_body(
-                        comparison_statement,
+                        Statement::If(comparison_operator),
                         first_value_expression,
                         Some(second_value_expression),
                         self.generated_ast.len() + 1,
                         None,
-                        false,
                     );
-                    // add new token to stack this doesn't fucking work
+                    // add new token to stack
                     self.insert_ast_token_at_end(new_token);
                     // check for block to execute after if statement
                     assert_eq!(*self.peek_next_token().unwrap(), Token::ScopeOpen);
-                    // switch the current token to the new scope, doesn't fucking work
                     self.insert_new_empty_ast_scope();
                     self.advance_token(); // skip scope open
                 }
                 Token::While => {
-                    // looking for any Variable/Literal, any comparison token and any Variable/Literal
-                    let first_value_expression: Expression = ASTGenerator::resolve_variable_read_like_token(
+                    // first half
+                    let mut first_value_tokens: Vec<Token> = vec![];
+                    while !ASTGenerator::token_is_comparison_like(self.peek_next_token().unwrap().to_owned()) {
+                        first_value_tokens.push(self.advance_and_get_token().to_owned());
+                    }
+                    let first_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
+                        first_value_tokens
+                    );
+
+                    // comparison
+                    let comparison_operator: Comparison = ASTGenerator::resolve_comparison_like_token(
                         self.advance_and_get_token().to_owned()
                     );
-                    let comparison_statement: Statement = ASTGenerator::resolve_comparison_like_token(
-                        self.advance_and_get_token().to_owned()
+
+                    // second half
+                    let mut second_value_tokens: Vec<Token> = vec![];
+                    while !ASTGenerator::token_is_scope_like(self.peek_next_token().unwrap().to_owned()) {
+                        second_value_tokens.push(self.advance_and_get_token().to_owned());
+                    }
+                    let second_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
+                        second_value_tokens
                     );
-                    let second_value_expression: Expression = ASTGenerator::resolve_variable_read_like_token(
-                        self.advance_and_get_token().to_owned()
-                    );
+
+                    // build token
                     let new_token: ASTToken = ASTToken::with_args_and_body(
-                        comparison_statement,
+                        Statement::While(comparison_operator),
                         first_value_expression,
                         Some(second_value_expression),
                         self.generated_ast.len() + 1,
                         None,
-                        true,
                     );
-                    // add new token to stack this doesn't fucking work
+                    // add new token to stack
                     self.insert_ast_token_at_end(new_token);
                     // check for block to execute after if statement
                     assert_eq!(*self.peek_next_token().unwrap(), Token::ScopeOpen);
-                    // switch the current token to the new scope, doesn't fucking work
                     self.insert_new_empty_ast_scope();
                     self.advance_token(); // skip scope open
                 }
                 Token::Alloc => {
                     // looking for Variable, Assign and any Literal or another Variable
-                    let variable_expression: Expression = ASTGenerator::resolve_variable_write_like_token(
+                    let variable_expression: Value = ASTGenerator::resolve_variable_write_like_token(
                         self.advance_and_get_token().to_owned()
                     );
                     // just make sure the = is there
                     if let Token::Assign = self.advance_and_get_token() {} else {
                         panic!("{:?} passed as Assign to Alloc!", current_token)
                     }
-                    let new_value_expression: Expression = ASTGenerator::resolve_variable_read_like_token(
-                        self.advance_and_get_token().to_owned()
+                    let mut new_value_tokens: Vec<Token> = vec![];
+                    while !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap().to_owned()) {
+                        new_value_tokens.push(self.advance_and_get_token().to_owned());
+                    }
+                    let new_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
+                        new_value_tokens
                     );
+
+                    // build token
                     let new_token: ASTToken = ASTToken::with_args(
                         Statement::Allocate,
                         variable_expression,
@@ -265,16 +346,22 @@ impl ASTGenerator {
                 }
                 Token::Set => {
                     // looking for Variable, Assign and any Literal or another Variable
-                    let variable_expression: Expression = ASTGenerator::resolve_variable_write_like_token(
+                    let variable_expression: Value = ASTGenerator::resolve_variable_write_like_token(
                         self.advance_and_get_token().to_owned()
                     );
                     // just make sure the = is there
                     if let Token::Assign = self.advance_and_get_token() {} else {
-                        panic!("{:?} passed as Assign to Set!", current_token)
+                        panic!("{:?} passed as Assign to Alloc!", current_token)
                     }
-                    let new_value_expression: Expression = ASTGenerator::resolve_variable_read_like_token(
-                        self.advance_and_get_token().to_owned()
+                    let mut new_value_tokens: Vec<Token> = vec![];
+                    while !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap().to_owned()) {
+                        new_value_tokens.push(self.advance_and_get_token().to_owned());
+                    }
+                    let new_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
+                        new_value_tokens
                     );
+
+                    // build token
                     let new_token: ASTToken = ASTToken::with_args(
                         Statement::Set,
                         variable_expression,
@@ -286,12 +373,18 @@ impl ASTGenerator {
                 }
                 Token::Print => {
                     // debug printing, takes 1 variable-like argument
-                    let value_expression: Expression = ASTGenerator::resolve_variable_read_like_token(
-                        self.advance_and_get_token().to_owned()
+                    let mut new_value_tokens: Vec<Token> = vec![];
+                    while !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap().to_owned()) {
+                        new_value_tokens.push(self.advance_and_get_token().to_owned());
+                    }
+                    let new_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
+                        new_value_tokens
                     );
+
+                    // build token
                     let new_token: ASTToken = ASTToken::with_args(
                         Statement::DebugPrintCall,
-                        value_expression,
+                        new_value_expression,
                         None
                     );
                     self.insert_ast_token_at_end(new_token);
@@ -299,7 +392,7 @@ impl ASTGenerator {
                 }
                 Token::ReadLine => {
                     // read line of input from terminal, takes 1 variable argument
-                    let variable_expression: Expression = ASTGenerator::resolve_variable_write_like_token(
+                    let variable_expression: Value = ASTGenerator::resolve_variable_write_like_token(
                         self.advance_and_get_token().to_owned()
                     );
                     let new_token: ASTToken = ASTToken::with_args(

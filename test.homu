@@ -1,22 +1,6 @@
-alloc var = 1; alloc nick = 8;
-alloc var2 = 3;
+alloc var = 0;
 
-if var == var2 {
-    alloc bob = "egg";
+while var < 3 {
+    set var = var + 1;
+    print "var = " + var + "\n";
 }
-if var == 1 {
-    set yolky = "shfhskdjfkf";
-    print "wahoo";
-}
-{}{}{}
-print 2;
-set bob = 16384;
-
-set truke = false;
-
-while truke != true {
-    print "OH MAI GAH";
-    set truke = true;
-}
-
-print truke;

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::astgen::{ASTToken, Expression, Statement};
+use crate::astgen::{ASTGenerator, ASTToken, Comparison, Operator, Statement, Value};
 
 #[derive(Debug, Clone)]
 enum Type {
@@ -58,8 +58,7 @@ impl Interpreter {
         if existing_idx != None {
             self.memory_cells[*existing_idx.unwrap()] = value;
         } else {
-            self.variable_map.insert(name, self.memory_cells.len());
-            self.memory_cells.push(value);
+            self.create_new_variable(name, value);
         }
     }
     fn resolve_variable_by_name(&self, name: String) -> Type {
@@ -72,23 +71,34 @@ impl Interpreter {
         let var = &self.memory_cells[*addr.unwrap()];
         return var.to_owned();
     }
-    fn resolve_argument_value(&self, argument: Expression) -> Type {
-        if let Expression::Variable(name) = argument {
+    fn resolve_argument_value(&self, argument: Value) -> Type {
+        if let Value::Variable(name) = argument {
             self.resolve_variable_by_name(name)
         } else {
             match argument {
-                Expression::IntegerLiteral(value) => {
-                    Type::Integer(value)
+                Value::IntegerLiteral(value) => Type::Integer(value),
+                Value::StringLiteral(value) => Type::String(value),
+                Value::BoolLiteral(value) => Type::Bool(value),
+                Value::Variable(name) => self.resolve_variable_by_name(name),
+                Value::Expression { values, operators } => {
+                    // oh boy
+                    let mut accumulator: Type = self.resolve_argument_value(
+                        values.first().unwrap().clone()
+                    );
+                    let mut index = 0;
+
+                    for operator in operators {
+                        accumulator = Interpreter::operate_on_types(
+                            accumulator.clone(),
+                            self.resolve_argument_value(values.get(index + 1).unwrap().clone()),
+                            operator
+                        );
+                        index += 1;
+                    }
+
+                    accumulator
                 }
-                Expression::StringLiteral(value) => {
-                    Type::String(value)
-                }
-                Expression::Bool(value) => {
-                    Type::Bool(value)
-                }
-                _ => {
-                    panic!("Malformed argument expression!")
-                }
+                _ => panic!("Malformed argument expression!"),
             }
         }
     }
@@ -99,6 +109,89 @@ impl Interpreter {
                 |_, v| *v <= invalid_scope_start
             );
             self.memory_cells.truncate(invalid_scope_start + 1);
+        }
+    }
+    fn compare_type_vars(first: Type, second: Type, operator: Comparison) -> bool {
+        match &first {
+            Type::Bool(first_val) => {
+                if let Type::Bool(second_val) = &second {
+                    match operator {
+                        Comparison::Equals => { return first_val == second_val; }
+                        Comparison::NotEquals => { return first_val != second_val; }
+                        Comparison::MoreThan => { return first_val > second_val; }
+                        Comparison::LessThan => { return first_val < second_val; }
+                        _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                    }
+                }
+                panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
+            }
+            Type::Integer(first_val) => {
+                if let Type::Integer(second_val) = &second {
+                    match operator {
+                        Comparison::Equals => { return first_val == second_val; }
+                        Comparison::NotEquals => { return first_val != second_val; }
+                        Comparison::MoreThan => { return first_val > second_val; }
+                        Comparison::LessThan => { return first_val < second_val; }
+                        _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                    }
+                }
+                panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
+            }
+            Type::String(first_val) => {
+                if let Type::String(second_val) = &second {
+                    match operator {
+                        Comparison::Equals => { return first_val == second_val; }
+                        Comparison::NotEquals => { return first_val != second_val; }
+                        Comparison::MoreThan => { return first_val.len() > second_val.len(); }
+                        Comparison::LessThan => { return first_val.len() < second_val.len(); }
+                        _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                    }
+                }
+                panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
+            }
+            _ => {
+                false
+            }
+        }
+    }
+    fn operate_on_types(first: Type, second: Type, operator: Operator) -> Type {
+        match &first {
+            Type::Bool(_) => {
+                if let Type::Bool(_) = &second {
+                    match operator {
+                        Operator::Add => { panic!("Invalid operator for comparison statement: {:?}", operator) }
+                        Operator::Sub => { panic!("Invalid operator for comparison statement: {:?}", operator) }
+                        _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                    }
+                }
+                panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
+            }
+            Type::Integer(first_val) => {
+                if let Type::Integer(second_val) = &second {
+                    match operator {
+                        Operator::Add => { return Type::Integer(first_val + second_val); }
+                        Operator::Sub => { return Type::Integer(first_val - second_val); }
+                        _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                    }
+                }
+                panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
+            }
+            Type::String(first_val) => {
+                match &second {
+                    Type::Bool(second_val) => {
+                        return Type::String(first_val.to_string() + &second_val.to_string());
+                    }
+                    Type::Integer(second_val) => {
+                        return Type::String(first_val.to_string() + &second_val.to_string());
+                    }
+                    Type::String(second_val) => {
+                        return Type::String(first_val.to_string() + second_val);
+                    }
+                }
+            }
+            _ => {
+                panic!("Operating on a type that can't be operated on!");
+            }
         }
     }
 
@@ -113,7 +206,6 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
-                recurring: _,
             } => {
                 self.halted = true;
             }
@@ -124,7 +216,6 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
-                recurring: _,
             } => {
                 self.mem_scope_start_stack.push(self.memory_cells.len());
                 self.loop_stack.push(self.inst_ptr);
@@ -137,7 +228,6 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
-                recurring: _,
             } => {
                 let loop_idx = self.loop_stack.pop().unwrap() - 1;
                 self.invalidate_current_scope();
@@ -145,13 +235,12 @@ impl Interpreter {
 
                 if loop_idx > 0 {
                     if let ASTToken {
-                        t_type: _,
+                        t_type: Statement::While(_),
                         arg1: _,
                         arg2: _,
                         body_idx: _,
                         body_extent: _,
                         else_body_idx: _,
-                        recurring: true,
                     } = previous_token {
                         self.inst_ptr = loop_idx;
                     } else {
@@ -166,9 +255,8 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
-                recurring: _,
             } => {
-                if let Some(Expression::Variable(name)) = arg1 {
+                if let Some(Value::Variable(name)) = arg1 {
                     self.create_new_variable(
                         name.to_owned(),
                         self.resolve_argument_value(arg2.unwrap())
@@ -186,9 +274,8 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
-                recurring: _,
             } => {
-                if let Some(Expression::Variable(name)) = arg1 {
+                if let Some(Value::Variable(name)) = arg1 {
                     self.set_or_create_new_variable(
                         name.to_owned(),
                         self.resolve_argument_value(arg2.unwrap())
@@ -206,92 +293,49 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
-                recurring: _,
             } => {
                 match self.resolve_argument_value(arg1.unwrap()) {
-                    Type::Integer(value) => println!("{}", value),
-                    Type::String(value) => println!("{}", value),
-                    Type::Bool(value) => println!("{}", value),
+                    Type::Integer(value) => print!("{}", value),
+                    Type::String(value) => print!("{}", value.replace("\\n", "\n")), // jank shit
+                    Type::Bool(value) => print!("{}", value),
                 }
 
                 self.inst_ptr += 1;
             }
             ASTToken {
-                t_type: Statement::Equals,
+                t_type: Statement::If(comparison_operator),
                 arg1,
                 arg2,
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
-                recurring: _,
             } => {
-                match self.resolve_argument_value(arg1.unwrap()) {
-                    Type::Integer(value) => {
-                        match self.resolve_argument_value(arg2.unwrap()) {
-                            Type::Integer(value2) => {
-                                if value == value2 {
-                                    self.inst_ptr += 1;
-                                } else {
-                                     // skip scope open and close at least
-                                    self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
-                                }
-                            },
-                            arg => panic!("Invalid arg for == statement: {:?} == {:?}", value, arg),
-                        }
-                    },
-                    Type::Bool(value) => {
-                        match self.resolve_argument_value(arg2.unwrap()) {
-                            Type::Bool(value2) => {
-                                if value == value2 {
-                                    self.inst_ptr += 1;
-                                } else {
-                                     // skip scope open and close at least
-                                    self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
-                                }
-                            },
-                            arg => panic!("Invalid arg for == statement: {:?} == {:?}", value, arg),
-                        }
-                    },
-                    arg => panic!("Invalid arg for == statement: {:?}", arg),
+                let first_arg: Type = self.resolve_argument_value(arg1.unwrap());
+                let second_arg: Type = self.resolve_argument_value(arg2.unwrap());
+
+                if Interpreter::compare_type_vars(first_arg, second_arg, comparison_operator) {
+                    self.inst_ptr += 1;
+                } else {
+                    // skip scope open and close at least
+                    self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
                 }
             }
             ASTToken {
-                t_type: Statement::NotEquals,
+                t_type: Statement::While(comparison_operator),
                 arg1,
                 arg2,
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
-                recurring: _,
             } => {
-                match self.resolve_argument_value(arg1.unwrap()) {
-                    Type::Integer(value) => {
-                        match self.resolve_argument_value(arg2.unwrap()) {
-                            Type::Integer(value2) => {
-                                if value != value2 {
-                                    self.inst_ptr += 1;
-                                } else {
-                                     // skip scope open and close at least
-                                    self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
-                                }
-                            },
-                            arg => panic!("Invalid arg for != statement: {:?} != {:?}", value, arg),
-                        }
-                    },
-                    Type::Bool(value) => {
-                        match self.resolve_argument_value(arg2.unwrap()) {
-                            Type::Bool(value2) => {
-                                if value != value2 {
-                                    self.inst_ptr += 1;
-                                } else {
-                                     // skip scope open and close at least
-                                    self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
-                                }
-                            },
-                            arg => panic!("Invalid arg for != statement: {:?} != {:?}", value, arg),
-                        }
-                    },
-                    arg => panic!("Invalid arg for != statement: {:?}", arg),
+                let first_arg: Type = self.resolve_argument_value(arg1.unwrap());
+                let second_arg: Type = self.resolve_argument_value(arg2.unwrap());
+
+                if Interpreter::compare_type_vars(first_arg, second_arg, comparison_operator) {
+                    self.inst_ptr += 1;
+                } else {
+                    // skip scope open and close at least
+                    self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
                 }
             }
             _ => {

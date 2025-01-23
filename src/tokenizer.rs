@@ -9,6 +9,7 @@ pub enum Token {
     },
     Symbol(char),
     Whitespace,
+    Comment,
     EOF,
     // special tokens, returned by post_process
     If,
@@ -20,12 +21,14 @@ pub enum Token {
     Is,
     Bang,
     Question,
-    LessThan,
-    MoreThan,
     Equals,
     NotEquals,
+    MoreThan,
+    LessThan,
     BoolTrue,
     BoolFalse,
+    Plus,
+    Minus,
     Alloc,
     Set,
     Print,
@@ -48,7 +51,7 @@ impl Tokenizer {
     fn char_idx_in_bounds(&self) -> bool { self.char_idx < self.get_current_line().len() }
     fn get_current_line(&self) -> &String { &self.lines[self.line_idx] }
     fn get_current_char(&self) -> char { self.get_current_line().chars().collect::<Vec<char>>()[self.char_idx] }
-    fn special_symbols() -> Vec<char> { vec!['{', '}', '!', '?', '=', '<', '>', ';'] }
+    fn special_symbols() -> Vec<char> { vec!['!', '?', '=', '{', '}', '>', '<', ';', '+', '-'] }
 
     pub fn next_token(&mut self) -> Token {
         if !self.char_idx_in_bounds() {
@@ -75,7 +78,10 @@ impl Tokenizer {
         } else if this_char.is_ascii_whitespace() {
             // coalesce whitespace
             return self.consume_whitespace();
-        }else if Tokenizer::special_symbols().contains(&this_char) {
+        } else if this_char == '#' {
+            // comments
+            return self.consume_comment();
+        } else if Tokenizer::special_symbols().contains(&this_char) {
             self.char_idx += 1;
             return Token::Symbol(this_char);
         } else {
@@ -107,9 +113,11 @@ impl Tokenizer {
                     '=' => Token::Assign,
                     '{' => Token::ScopeOpen,
                     '}' => Token::ScopeClose,
-                    '<' => Token::LessThan,
                     '>' => Token::MoreThan,
+                    '<' => Token::LessThan,
                     ';' => Token::LineEnd,
+                    '+' => Token::Plus,
+                    '-' => Token::Minus,
                     _ => token,
                 }
             }
@@ -123,9 +131,9 @@ impl Tokenizer {
         // remove whitespace and coalesce some tokens
         for (token_idx, token) in tokens.iter().enumerate() {
             let token = token.clone();
-            if token == Token::Whitespace { continue; }
+            if token == Token::Whitespace || token == Token::Comment { continue; }
 
-            // coalesce "==" to EqualsCompare and "!=" to NotEqualsCompare
+            // coalesce "==" to Equals and "!=" to NotEquals
             if
                 token == Token::Symbol('=')
                 && token_idx >= 1
@@ -212,5 +220,13 @@ impl Tokenizer {
         }
 
         Token::Whitespace
+    }
+
+    fn consume_comment(&mut self) -> Token {
+        while self.char_idx_in_bounds() {
+            self.char_idx += 1
+        }
+
+        Token::Comment
     }
 }
