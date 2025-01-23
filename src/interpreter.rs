@@ -255,6 +255,45 @@ impl Interpreter {
                     arg => panic!("Invalid arg for == statement: {:?}", arg),
                 }
             }
+            ASTToken {
+                t_type: Statement::NotEquals,
+                arg1,
+                arg2,
+                body_idx: _,
+                body_extent: _,
+                else_body_idx: _,
+                recurring: _,
+            } => {
+                match self.resolve_argument_value(arg1.unwrap()) {
+                    Type::Integer(value) => {
+                        match self.resolve_argument_value(arg2.unwrap()) {
+                            Type::Integer(value2) => {
+                                if value != value2 {
+                                    self.inst_ptr += 1;
+                                } else {
+                                     // skip scope open and close at least
+                                    self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
+                                }
+                            },
+                            arg => panic!("Invalid arg for != statement: {:?} != {:?}", value, arg),
+                        }
+                    },
+                    Type::Bool(value) => {
+                        match self.resolve_argument_value(arg2.unwrap()) {
+                            Type::Bool(value2) => {
+                                if value != value2 {
+                                    self.inst_ptr += 1;
+                                } else {
+                                     // skip scope open and close at least
+                                    self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
+                                }
+                            },
+                            arg => panic!("Invalid arg for != statement: {:?} != {:?}", value, arg),
+                        }
+                    },
+                    arg => panic!("Invalid arg for != statement: {:?}", arg),
+                }
+            }
             _ => {
                 self.inst_ptr += 1;
             }
