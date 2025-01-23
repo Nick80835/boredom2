@@ -8,6 +8,13 @@ if var == 1 {
     set yolky = "shfhskdjfkf";
     print "wahoo";
 }
-
+{}{}{}
 print 2;
 set bob = 16384;
+
+set truke = true;
+
+while truke == true {
+    print "OH MAI GAH";
+    set truke = false;
+}

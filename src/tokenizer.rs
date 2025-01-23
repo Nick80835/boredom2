@@ -12,6 +12,7 @@ pub enum Token {
     EOF,
     // special tokens, returned by post_process
     If,
+    While,
     Else,
     ScopeOpen,
     ScopeClose,
@@ -23,6 +24,8 @@ pub enum Token {
     MoreThan,
     Equals,
     NotEquals,
+    BoolTrue,
+    BoolFalse,
     Alloc,
     Set,
     Print,
@@ -85,13 +88,16 @@ impl Tokenizer {
             Token::RawIdentifier(id) => {
                 match id.as_str() {
                     "if" => Token::If,
+                    "while" => Token::While,
                     "is" => Token::Is,
                     "else" => Token::Else,
                     "alloc" => Token::Alloc,
                     "set" => Token::Set,
                     "print" => Token::Print,
                     "readln" => Token::ReadLine,
-                    _ => Token::Variable{ name: id.to_string() }
+                    "true" => Token::BoolTrue,
+                    "false" => Token::BoolFalse,
+                    _ => Token::Variable{ name: id.to_string() },
                 }
             }
             Token::Symbol(sym) => {
@@ -104,7 +110,7 @@ impl Tokenizer {
                     '<' => Token::LessThan,
                     '>' => Token::MoreThan,
                     ';' => Token::LineEnd,
-                    _ => token
+                    _ => token,
                 }
             }
             _ => token

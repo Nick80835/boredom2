@@ -4,6 +4,7 @@ use crate::tokenizer::Token;
 pub enum Expression {
     IntegerLiteral(u32),
     StringLiteral(String),
+    Bool(bool),
     Variable(String),
 }
 
@@ -15,7 +16,6 @@ pub enum Statement {
     BlockEnd,
     Allocate,
     Set,
-    If,
     Equals,
     NotEquals,
     MoreThan,
@@ -37,32 +37,33 @@ pub struct ASTToken {
     pub body_idx: Option<usize>,
     pub body_extent: Option<usize>,
     pub else_body_idx: Option<usize>,
+    pub recurring: bool,
 }
 
 impl ASTToken {
     pub fn empty() -> Self {
         Self {
-            t_type: Statement::Empty, arg1: None, arg2: None, body_idx: None, body_extent: None, else_body_idx: None
+            t_type: Statement::Empty, arg1: None, arg2: None, body_idx: None, body_extent: None, else_body_idx: None, recurring: false
         }
     }
     pub fn of_type(t_type: Statement) -> Self {
         Self {
-            t_type, arg1: None, arg2: None, body_idx: None, body_extent: None, else_body_idx: None
+            t_type, arg1: None, arg2: None, body_idx: None, body_extent: None, else_body_idx: None, recurring: false
         }
     }
     pub fn with_args(t_type: Statement, arg1: Expression, arg2: Option<Expression>) -> Self {
         Self {
-            t_type, arg1: Some(arg1), arg2: arg2, body_idx: None, body_extent: None, else_body_idx: None
+            t_type, arg1: Some(arg1), arg2: arg2, body_idx: None, body_extent: None, else_body_idx: None, recurring: false
         }
     }
-    pub fn with_args_and_body(t_type: Statement, arg1: Expression, arg2: Option<Expression>, body_idx: usize, else_body_idx: Option<usize>) -> Self {
+    pub fn with_args_and_body(t_type: Statement, arg1: Expression, arg2: Option<Expression>, body_idx: usize, else_body_idx: Option<usize>, recurring: bool) -> Self {
         Self {
-            t_type, arg1: Some(arg1), arg2: arg2, body_idx: Some(body_idx), body_extent: None, else_body_idx
+            t_type, arg1: Some(arg1), arg2: arg2, body_idx: Some(body_idx), body_extent: None, else_body_idx, recurring
         }
     }
     pub fn new_scope(body_idx: usize) -> Self {
         Self {
-            t_type: Statement::Block, arg1: None, arg2: None, body_idx: Some(body_idx), body_extent: None, else_body_idx: None
+            t_type: Statement::Block, arg1: None, arg2: None, body_idx: Some(body_idx), body_extent: None, else_body_idx: None, recurring: false
         }
     }
 }
@@ -104,6 +105,12 @@ impl ASTGenerator {
             }
             Token::StringLiteral { value } => {
                 Expression::StringLiteral(value.to_owned())
+            }
+            Token::BoolTrue => {
+                Expression::Bool(true)
+            }
+            Token::BoolFalse => {
+                Expression::Bool(false)
             }
             Token::Variable { name } => {
                 Expression::Variable(name)
@@ -197,7 +204,35 @@ impl ASTGenerator {
                         first_value_expression,
                         Some(second_value_expression),
                         self.generated_ast.len() + 1,
-                        None
+                        None,
+                        false,
+                    );
+                    // add new token to stack this doesn't fucking work
+                    self.insert_ast_token_at_end(new_token);
+                    // check for block to execute after if statement
+                    assert_eq!(*self.peek_next_token().unwrap(), Token::ScopeOpen);
+                    // switch the current token to the new scope, doesn't fucking work
+                    self.insert_new_empty_ast_scope();
+                    self.advance_token(); // skip scope open
+                }
+                Token::While => {
+                    // looking for any Variable/Literal, any comparison token and any Variable/Literal
+                    let first_value_expression: Expression = ASTGenerator::resolve_variable_read_like_token(
+                        self.advance_and_get_token().to_owned()
+                    );
+                    let comparison_statement: Statement = ASTGenerator::resolve_comparison_like_token(
+                        self.advance_and_get_token().to_owned()
+                    );
+                    let second_value_expression: Expression = ASTGenerator::resolve_variable_read_like_token(
+                        self.advance_and_get_token().to_owned()
+                    );
+                    let new_token: ASTToken = ASTToken::with_args_and_body(
+                        comparison_statement,
+                        first_value_expression,
+                        Some(second_value_expression),
+                        self.generated_ast.len() + 1,
+                        None,
+                        true,
                     );
                     // add new token to stack this doesn't fucking work
                     self.insert_ast_token_at_end(new_token);

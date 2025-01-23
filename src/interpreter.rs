@@ -6,6 +6,7 @@ use crate::astgen::{ASTToken, Expression, Statement};
 enum Type {
     Integer(u32),
     String(String),
+    Bool(bool),
 }
 
 pub struct Interpreter {
@@ -14,7 +15,9 @@ pub struct Interpreter {
     inst_ptr: usize,
     memory_cells: Vec<Type>,
     variable_map: HashMap<String, usize>,
-    scope_start_stack: Vec<usize>,
+    mem_scope_start_stack: Vec<usize>,
+    loop_stack: Vec<usize>,
+    return_stack: Vec<usize>,
 }
 
 impl Interpreter {
@@ -25,7 +28,9 @@ impl Interpreter {
             inst_ptr: 0,
             memory_cells: vec![],
             variable_map: HashMap::new(),
-            scope_start_stack: vec![0],
+            mem_scope_start_stack: vec![0],
+            loop_stack: vec![],
+            return_stack: vec![],
         }
     }
     fn current_inst(&self) -> &ASTToken {
@@ -33,6 +38,9 @@ impl Interpreter {
     }
     fn peek_next_inst(&self) -> &ASTToken {
         &self.ast_tokens[self.inst_ptr + 1]
+    }
+    fn get_inst(&self, idx: usize) -> &ASTToken {
+        self.ast_tokens.get(idx).unwrap()
     }
     pub fn print_state(&self) {
         println!("STATE\n{} | {:?}\n{:?}\n{:?}", self.inst_ptr, self.current_inst(), self.memory_cells, self.variable_map);
@@ -75,10 +83,22 @@ impl Interpreter {
                 Expression::StringLiteral(value) => {
                     Type::String(value)
                 }
+                Expression::Bool(value) => {
+                    Type::Bool(value)
+                }
                 _ => {
                     panic!("Malformed argument expression!")
                 }
             }
+        }
+    }
+    fn invalidate_current_scope(&mut self) {
+        if self.memory_cells.len() > 0 {
+            let invalid_scope_start: usize = self.mem_scope_start_stack.pop().unwrap() - 1;
+            self.variable_map.retain(
+                |_, v| *v <= invalid_scope_start
+            );
+            self.memory_cells.truncate(invalid_scope_start + 1);
         }
     }
 
@@ -93,6 +113,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                recurring: _,
             } => {
                 self.halted = true;
             }
@@ -103,8 +124,10 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                recurring: _,
             } => {
-                self.scope_start_stack.push(self.memory_cells.len());
+                self.mem_scope_start_stack.push(self.memory_cells.len());
+                self.loop_stack.push(self.inst_ptr);
                 self.inst_ptr += 1;
             }
             ASTToken {
@@ -114,17 +137,27 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                recurring: _,
             } => {
-                if self.memory_cells.len() > 0 {
-                    let invalid_scope_start: usize = self.scope_start_stack.pop().unwrap() - 1;
+                let loop_idx = self.loop_stack.pop().unwrap() - 1;
+                self.invalidate_current_scope();
+                let previous_token = self.get_inst(loop_idx);
 
-                    self.variable_map.retain(
-                        |_, v| *v <= invalid_scope_start
-                    );
-                    self.memory_cells.truncate(invalid_scope_start + 1);
+                if loop_idx > 0 {
+                    if let ASTToken {
+                        t_type: _,
+                        arg1: _,
+                        arg2: _,
+                        body_idx: _,
+                        body_extent: _,
+                        else_body_idx: _,
+                        recurring: true,
+                    } = previous_token {
+                        self.inst_ptr = loop_idx;
+                    } else {
+                        self.inst_ptr += 1;
+                    }
                 }
-
-                self.inst_ptr += 1;
             }
             ASTToken {
                 t_type: Statement::Allocate,
@@ -133,6 +166,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                recurring: _,
             } => {
                 if let Some(Expression::Variable(name)) = arg1 {
                     self.create_new_variable(
@@ -152,6 +186,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                recurring: _,
             } => {
                 if let Some(Expression::Variable(name)) = arg1 {
                     self.set_or_create_new_variable(
@@ -171,10 +206,12 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                recurring: _,
             } => {
                 match self.resolve_argument_value(arg1.unwrap()) {
                     Type::Integer(value) => println!("{}", value),
                     Type::String(value) => println!("{}", value),
+                    Type::Bool(value) => println!("{}", value),
                 }
 
                 self.inst_ptr += 1;
@@ -186,11 +223,25 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                recurring: _,
             } => {
                 match self.resolve_argument_value(arg1.unwrap()) {
                     Type::Integer(value) => {
                         match self.resolve_argument_value(arg2.unwrap()) {
                             Type::Integer(value2) => {
+                                if value == value2 {
+                                    self.inst_ptr += 1;
+                                } else {
+                                     // skip scope open and close at least
+                                    self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
+                                }
+                            },
+                            arg => panic!("Invalid arg for == statement: {:?} == {:?}", value, arg),
+                        }
+                    },
+                    Type::Bool(value) => {
+                        match self.resolve_argument_value(arg2.unwrap()) {
+                            Type::Bool(value2) => {
                                 if value == value2 {
                                     self.inst_ptr += 1;
                                 } else {
