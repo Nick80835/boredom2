@@ -7,6 +7,7 @@ enum Type {
     Integer(u32),
     String(String),
     Bool(bool),
+    Array(Vec<Type>),
 }
 
 pub struct Interpreter {
@@ -98,6 +99,15 @@ impl Interpreter {
 
                     accumulator
                 }
+                Value::Array(values) => {
+                    let mut accumulator: Vec<Type> = vec![];
+
+                    for value in values {
+                        accumulator.push(self.resolve_argument_value(value));
+                    }
+
+                    Type::Array(accumulator)
+                },
                 _ => panic!("Malformed argument expression!"),
             }
         }
@@ -194,6 +204,40 @@ impl Interpreter {
                             Operator::LessThanOrEquals => { return Type::Bool(first_val.len() <= second_val.len()); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
+                    }
+                    _ => {
+                        panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
+                    }
+                }
+            }
+            Type::Array(first_val) => {
+                match &second {
+                    Type::Integer(second_val) => {
+                        match operator {
+                            // math
+                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second].to_owned()].concat()); }
+                            Operator::ArrayAccess => {
+                                return first_val[*second_val as usize].to_owned();
+                            }
+                            _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                        }
+                    }
+                    Type::Bool(_) => {
+                        match operator {
+                            // math
+                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second].to_owned()].concat()); }
+                            _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                        }
+                    }
+                    Type::String(_) => {
+                        match operator {
+                            // math
+                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second].to_owned()].concat()); }
+                            _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                        }
+                    }
+                    _ => {
+                        panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
                     }
                 }
             }
@@ -306,6 +350,7 @@ impl Interpreter {
                     Type::Integer(value) => print!("{}", value),
                     Type::String(value) => print!("{}", value.replace("\\n", "\n")), // jank shit
                     Type::Bool(value) => print!("{}", value),
+                    Type::Array(value) => print!("{:?}", value),
                 }
 
                 self.inst_ptr += 1;

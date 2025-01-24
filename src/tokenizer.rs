@@ -19,7 +19,7 @@ pub enum Token {
     ScopeClose,
     Assign,
     Is,
-    Bang,
+    ArrayAccess,
     Question,
     Equals,
     NotEquals,
@@ -35,6 +35,8 @@ pub enum Token {
     MinusEquals,
     Alloc,
     Set,
+    ArrayOpen,
+    ArrayClose,
     Print,
     ReadLine,
     LineEnd,
@@ -57,7 +59,7 @@ impl Tokenizer {
     fn char_idx_in_bounds(&self) -> bool { self.char_idx < self.get_current_line().len() }
     fn get_current_line(&self) -> &String { &self.lines[self.line_idx] }
     fn get_current_char(&self) -> char { self.get_current_line().chars().collect::<Vec<char>>()[self.char_idx] }
-    fn special_symbols() -> Vec<char> { vec!['!', '?', '=', '{', '}', '>', '<', ';', '+', '-', ':'] }
+    fn special_symbols() -> Vec<char> { vec!['?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '!'] }
 
     pub fn next_token(&mut self) -> Token {
         if !self.char_idx_in_bounds() {
@@ -115,7 +117,6 @@ impl Tokenizer {
             }
             Token::Symbol(sym) => {
                 match sym {
-                    '!' => Token::Bang,
                     '?' => Token::Question,
                     '=' => Token::Assign,
                     '{' => Token::ScopeOpen,
@@ -126,6 +127,9 @@ impl Tokenizer {
                     '+' => Token::Plus,
                     '-' => Token::Minus,
                     ':' => Token::Label,
+                    '[' => Token::ArrayOpen,
+                    ']' => Token::ArrayClose,
+                    '!' => Token::ArrayAccess,
                     _ => token,
                 }
             }

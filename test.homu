@@ -1,11 +1,5 @@
-#set a = 2;
-
-if true {
-    print "in set";
-    set a = 3;
-    print a;
-    jump out;
-}
-
-:out;
-print a;
+set var = [1];
+print var!0;
+var += "egg";
+print var!1;
+print "\n" + var!1 + " is a fine word";
