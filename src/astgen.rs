@@ -13,19 +13,15 @@ pub enum Value {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Comparison {
+pub enum Operator {
+    Add,
+    Sub,
     Equals,
     NotEquals,
     MoreThan,
     LessThan,
     MoreThanOrEquals,
     LessThanOrEquals,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Operator {
-    Add,
-    Sub,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -39,8 +35,8 @@ pub enum Statement {
     ReadLineCall,
     EOF,
     // conditions
-    If(Comparison),
-    While(Comparison),
+    If(Operator),
+    While(Operator),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -123,7 +119,7 @@ impl ASTGenerator {
             _ => panic!("{:?} passed as value for variable read token!", token),
         }
     }
-    fn resolve_variable_read_like_expression(tokens: Vec<Token>) -> Value {
+    fn resolve_token_read_like_expression(tokens: Vec<Token>) -> Value {
         if tokens.len() < 2 {
             return ASTGenerator::resolve_value_from_token(tokens.last().unwrap().clone());
         }
@@ -162,15 +158,73 @@ impl ASTGenerator {
             }
         }
     }
-    fn resolve_comparison_like_token(token: Token) -> Comparison {
+    fn resolve_comparison_like_token(token: Token) -> Operator {
         match token {
-            Token::Equals => Comparison::Equals,
-            Token::NotEquals => Comparison::NotEquals,
-            Token::MoreThan => Comparison::MoreThan,
-            Token::LessThan => Comparison::LessThan,
-            Token::MoreThanOrEquals => Comparison::MoreThanOrEquals,
-            Token::LessThanOrEquals => Comparison::LessThanOrEquals,
+            Token::Equals => Operator::Equals,
+            Token::NotEquals => Operator::NotEquals,
+            Token::MoreThan => Operator::MoreThan,
+            Token::LessThan => Operator::LessThan,
+            Token::MoreThanOrEquals => Operator::MoreThanOrEquals,
+            Token::LessThanOrEquals => Operator::LessThanOrEquals,
             _ => panic!("{:?} passed as value for comparison-like token!", token),
+        }
+    }
+    fn resolve_any_value(&mut self) -> (Vec<Value>, Vec<Operator>) {
+        let mut value_tokens: Vec<Token> = vec![];
+
+        while
+            !ASTGenerator::token_is_scope_like(self.peek_next_token().unwrap().to_owned())
+            && !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap().to_owned())
+        {
+            value_tokens.push(self.advance_and_get_token().to_owned());
+        }
+
+        if value_tokens.len() == 1 {
+            // single literal
+            return (vec![ASTGenerator::resolve_token_read_like_expression(value_tokens)], vec![])
+        } else if (value_tokens.len() - 1) % 2 == 0 {
+            let mut temp_tokens: Vec<Token> = vec![];
+            let mut token_sublists: Vec<Vec<Token>> = vec![];
+            let mut comparison_operators: Vec<Token> = vec![];
+
+            for token in value_tokens {
+                if ASTGenerator::token_is_comparison_like(token.to_owned()) {
+                    // add new operator and move temp tokens to list of token lists
+                    comparison_operators.push(token.to_owned());
+                    token_sublists.push(temp_tokens.to_owned());
+                    temp_tokens.clear();
+                } else {
+                    temp_tokens.push(token.to_owned());
+                }
+            }
+
+            if temp_tokens.len() > 0 {
+                // get that last list
+                token_sublists.push(temp_tokens.to_owned());
+            }
+
+            let mut final_values: Vec<Value> = vec![];
+            let mut final_comparisons: Vec<Operator> = vec![];
+
+            if comparison_operators.len() > 0 {
+                for (index, token_sublist) in token_sublists.iter().enumerate() {
+                    final_values.push(ASTGenerator::resolve_token_read_like_expression(
+                        token_sublist.to_owned()
+                    ));
+
+                    if index > 0 {
+                        final_comparisons.push(ASTGenerator::resolve_comparison_like_token(
+                            comparison_operators.get(index - 1).unwrap().to_owned()
+                        ));
+                    }
+                }
+
+                return (final_values, final_comparisons);
+            } else {
+                panic!("Invalid operand length!");
+            }
+        } else {
+            panic!("Invalid operand length!");
         }
     }
     fn token_is_comparison_like(token: Token) -> bool {
@@ -186,6 +240,12 @@ impl ASTGenerator {
         match token {
             Token::PlusEquals |
             Token::MinusEquals => true,
+            _ => false,
+        }
+    }
+    fn token_is_assign_like(token: Token) -> bool {
+        match token {
+            Token::Assign => true,
             _ => false,
         }
     }
@@ -241,37 +301,28 @@ impl ASTGenerator {
                     self.insert_ast_token_at_end(ASTToken::of_type(Statement::EOF));
                 }
                 Token::If => {
-                    // first half
-                    let mut first_value_tokens: Vec<Token> = vec![];
-                    while !ASTGenerator::token_is_comparison_like(self.peek_next_token().unwrap().to_owned()) {
-                        first_value_tokens.push(self.advance_and_get_token().to_owned());
+                    let (value_tokens, comparisons) = self.resolve_any_value();
+                    let new_token: ASTToken;
+
+                    if comparisons.len() == 0 {
+                        // implicit bool
+                        new_token = ASTToken::with_args_and_body(
+                            Statement::If(Operator::Equals),
+                            value_tokens[0].to_owned(),
+                            Some(Value::BoolLiteral(true)),
+                            self.generated_ast.len() + 1,
+                            None,
+                        );
+                    } else {
+                        new_token = ASTToken::with_args_and_body(
+                            Statement::If(comparisons[0].to_owned()),
+                            value_tokens[0].to_owned(),
+                            Some(value_tokens[1].to_owned()),
+                            self.generated_ast.len() + 1,
+                            None,
+                        );
                     }
-                    let first_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
-                        first_value_tokens
-                    );
 
-                    // comparison
-                    let comparison_operator: Comparison = ASTGenerator::resolve_comparison_like_token(
-                        self.advance_and_get_token().to_owned()
-                    );
-
-                    // second half
-                    let mut second_value_tokens: Vec<Token> = vec![];
-                    while !ASTGenerator::token_is_scope_like(self.peek_next_token().unwrap().to_owned()) {
-                        second_value_tokens.push(self.advance_and_get_token().to_owned());
-                    }
-                    let second_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
-                        second_value_tokens
-                    );
-
-                    // build token
-                    let new_token: ASTToken = ASTToken::with_args_and_body(
-                        Statement::If(comparison_operator),
-                        first_value_expression,
-                        Some(second_value_expression),
-                        self.generated_ast.len() + 1,
-                        None,
-                    );
                     // add new token to stack
                     self.insert_ast_token_at_end(new_token);
                     // check for block to execute after if statement
@@ -280,37 +331,28 @@ impl ASTGenerator {
                     self.advance_token(); // skip scope open
                 }
                 Token::While => {
-                    // first half
-                    let mut first_value_tokens: Vec<Token> = vec![];
-                    while !ASTGenerator::token_is_comparison_like(self.peek_next_token().unwrap().to_owned()) {
-                        first_value_tokens.push(self.advance_and_get_token().to_owned());
+                    let (value_tokens, comparisons) = self.resolve_any_value();
+                    let new_token: ASTToken;
+
+                    if comparisons.len() == 0 {
+                        // implicit bool
+                        new_token = ASTToken::with_args_and_body(
+                            Statement::While(Operator::Equals),
+                            value_tokens[0].to_owned(),
+                            Some(Value::BoolLiteral(true)),
+                            self.generated_ast.len() + 1,
+                            None,
+                        );
+                    } else {
+                        new_token = ASTToken::with_args_and_body(
+                            Statement::While(comparisons[0].to_owned()),
+                            value_tokens[0].to_owned(),
+                            Some(value_tokens[1].to_owned()),
+                            self.generated_ast.len() + 1,
+                            None,
+                        );
                     }
-                    let first_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
-                        first_value_tokens
-                    );
 
-                    // comparison
-                    let comparison_operator: Comparison = ASTGenerator::resolve_comparison_like_token(
-                        self.advance_and_get_token().to_owned()
-                    );
-
-                    // second half
-                    let mut second_value_tokens: Vec<Token> = vec![];
-                    while !ASTGenerator::token_is_scope_like(self.peek_next_token().unwrap().to_owned()) {
-                        second_value_tokens.push(self.advance_and_get_token().to_owned());
-                    }
-                    let second_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
-                        second_value_tokens
-                    );
-
-                    // build token
-                    let new_token: ASTToken = ASTToken::with_args_and_body(
-                        Statement::While(comparison_operator),
-                        first_value_expression,
-                        Some(second_value_expression),
-                        self.generated_ast.len() + 1,
-                        None,
-                    );
                     // add new token to stack
                     self.insert_ast_token_at_end(new_token);
                     // check for block to execute after if statement
@@ -331,7 +373,7 @@ impl ASTGenerator {
                     while !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap().to_owned()) {
                         new_value_tokens.push(self.advance_and_get_token().to_owned());
                     }
-                    let new_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
+                    let new_value_expression: Value = ASTGenerator::resolve_token_read_like_expression(
                         new_value_tokens
                     );
 
@@ -346,28 +388,37 @@ impl ASTGenerator {
                     assert_eq!(*self.peek_next_token().unwrap(), Token::LineEnd);
                 }
                 Token::Set => {
-                    // looking for Variable, Assign and any Literal or another Variable
+                    // get the variable to assign to
                     let variable_expression: Value = ASTGenerator::resolve_variable_write_like_token(
                         self.advance_and_get_token().to_owned()
                     );
-                    // just make sure the = is there
-                    if let Token::Assign = self.advance_and_get_token() {} else {
-                        panic!("{:?} passed as Assign to Set!", current_token)
-                    }
-                    let mut new_value_tokens: Vec<Token> = vec![];
-                    while !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap().to_owned()) {
-                        new_value_tokens.push(self.advance_and_get_token().to_owned());
-                    }
-                    let new_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
-                        new_value_tokens
-                    );
 
-                    // build token
-                    let new_token: ASTToken = ASTToken::with_args(
-                        Statement::Set,
-                        variable_expression,
-                        Some(new_value_expression),
-                    );
+                    // make sure the = is there
+                    if !ASTGenerator::token_is_assign_like(self.advance_and_get_token().to_owned()) {
+                        panic!("{:?} passed as Assign to Alloc!", current_token)
+                    }
+
+                    let (value_tokens, comparisons) = self.resolve_any_value();
+                    let new_token: ASTToken;
+
+                    if comparisons.len() == 0 {
+                        new_token = ASTToken::with_args_and_body(
+                            Statement::Set,
+                            variable_expression,
+                            Some(value_tokens.get(0).unwrap().to_owned()),
+                            self.generated_ast.len() + 1,
+                            None,
+                        );
+                    } else {
+                        new_token = ASTToken::with_args_and_body(
+                            Statement::Set,
+                            variable_expression,
+                            Some(Value::Expression { values: value_tokens, operators: comparisons }),
+                            self.generated_ast.len() + 1,
+                            None,
+                        );
+                    }
+
                     self.insert_ast_token_at_end(new_token);
                     // check for line end, alloc takes a fixed amount of args
                     assert_eq!(*self.peek_next_token().unwrap(), Token::LineEnd);
@@ -402,7 +453,7 @@ impl ASTGenerator {
                     while !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap().to_owned()) {
                         new_value_tokens.push(self.advance_and_get_token().to_owned());
                     }
-                    let new_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
+                    let new_value_expression: Value = ASTGenerator::resolve_token_read_like_expression(
                         new_value_tokens
                     );
 
@@ -422,7 +473,7 @@ impl ASTGenerator {
                     while !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap().to_owned()) {
                         new_value_tokens.push(self.advance_and_get_token().to_owned());
                     }
-                    let new_value_expression: Value = ASTGenerator::resolve_variable_read_like_expression(
+                    let new_value_expression: Value = ASTGenerator::resolve_token_read_like_expression(
                         new_value_tokens
                     );
 

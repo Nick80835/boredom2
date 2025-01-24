@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::astgen::{ASTGenerator, ASTToken, Comparison, Operator, Statement, Value};
+use crate::astgen::{ASTToken, Operator, Statement, Value};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum Type {
     Integer(u32),
     String(String),
@@ -111,87 +111,89 @@ impl Interpreter {
             self.memory_cells.truncate(invalid_scope_start + 1);
         }
     }
-    fn compare_type_vars(first: Type, second: Type, operator: Comparison) -> bool {
-        match &first {
-            Type::Bool(first_val) => {
-                if let Type::Bool(second_val) = &second {
-                    match operator {
-                        Comparison::Equals => { return first_val == second_val; }
-                        Comparison::NotEquals => { return first_val != second_val; }
-                        Comparison::MoreThan => { return first_val > second_val; }
-                        Comparison::LessThan => { return first_val < second_val; }
-                        Comparison::MoreThanOrEquals => { return first_val >= second_val; }
-                        Comparison::LessThanOrEquals => { return first_val <= second_val; }
-                        _ => panic!("Invalid operator for comparison statement: {:?}", operator)
-                    }
-                }
-                panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
-            }
-            Type::Integer(first_val) => {
-                if let Type::Integer(second_val) = &second {
-                    match operator {
-                        Comparison::Equals => { return first_val == second_val; }
-                        Comparison::NotEquals => { return first_val != second_val; }
-                        Comparison::MoreThan => { return first_val > second_val; }
-                        Comparison::LessThan => { return first_val < second_val; }
-                        Comparison::MoreThanOrEquals => { return first_val >= second_val; }
-                        Comparison::LessThanOrEquals => { return first_val <= second_val; }
-                        _ => panic!("Invalid operator for comparison statement: {:?}", operator)
-                    }
-                }
-                panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
-            }
-            Type::String(first_val) => {
-                if let Type::String(second_val) = &second {
-                    match operator {
-                        Comparison::Equals => { return first_val == second_val; }
-                        Comparison::NotEquals => { return first_val != second_val; }
-                        Comparison::MoreThan => { return first_val.len() > second_val.len(); }
-                        Comparison::LessThan => { return first_val.len() < second_val.len(); }
-                        Comparison::MoreThanOrEquals => { return first_val.len() >= second_val.len(); }
-                        Comparison::LessThanOrEquals => { return first_val.len() <= second_val.len(); }
-                        _ => panic!("Invalid operator for comparison statement: {:?}", operator)
-                    }
-                }
-                panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
-            }
-            _ => {
-                false
-            }
-        }
-    }
     fn operate_on_types(first: Type, second: Type, operator: Operator) -> Type {
         match &first {
-            Type::Bool(_) => {
-                if let Type::Bool(_) = &second {
-                    match operator {
-                        Operator::Add => { panic!("Invalid operator for comparison statement: {:?}", operator) }
-                        Operator::Sub => { panic!("Invalid operator for comparison statement: {:?}", operator) }
-                        _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+            Type::Bool(first_val) => {
+                match &second {
+                    Type::Bool(second_val) => {
+                        match operator {
+                            // logical
+                            Operator::Equals => { return Type::Bool(first_val == second_val); }
+                            Operator::NotEquals => { return Type::Bool(first_val != second_val); }
+                            Operator::MoreThan => { return Type::Bool(first_val > second_val); }
+                            Operator::LessThan => { return Type::Bool(first_val < second_val); }
+                            Operator::MoreThanOrEquals => { return Type::Bool(first_val >= second_val); }
+                            Operator::LessThanOrEquals => { return Type::Bool(first_val <= second_val); }
+                            _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                        }
+                    }
+                    _ => {
+                        panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
                     }
                 }
-                panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
             }
             Type::Integer(first_val) => {
-                if let Type::Integer(second_val) = &second {
-                    match operator {
-                        Operator::Add => { return Type::Integer(first_val + second_val); }
-                        Operator::Sub => { return Type::Integer(first_val - second_val); }
-                        _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                match &second {
+                    Type::Integer(second_val) => {
+                        match operator {
+                            // math
+                            Operator::Add => { return Type::Integer(first_val + second_val); }
+                            Operator::Sub => { return Type::Integer(first_val - second_val); }
+                            // logical
+                            Operator::Equals => { return Type::Bool(first_val == second_val); }
+                            Operator::NotEquals => { return Type::Bool(first_val != second_val); }
+                            Operator::MoreThan => { return Type::Bool(first_val > second_val); }
+                            Operator::LessThan => { return Type::Bool(first_val < second_val); }
+                            Operator::MoreThanOrEquals => { return Type::Bool(first_val >= second_val); }
+                            Operator::LessThanOrEquals => { return Type::Bool(first_val <= second_val); }
+                            _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                        }
+                    }
+                    Type::Bool(second_val) => {
+                        match operator {
+                            // logical
+                            Operator::Equals => { return Type::Bool((*first_val == 0) != *second_val); }
+                            Operator::NotEquals => { return Type::Bool((*first_val != 0) != *second_val); }
+                            _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                        }
+                    }
+                    _ => {
+                        panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
                     }
                 }
-                panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
             }
             Type::String(first_val) => {
                 match &second {
-                    Type::Bool(second_val) => {
-                        return Type::String(first_val.to_string() + &second_val.to_string());
-                    }
                     Type::Integer(second_val) => {
-                        return Type::String(first_val.to_string() + &second_val.to_string());
+                        match operator {
+                            // math
+                            Operator::Add => { return Type::String(first_val.to_string() + &second_val.to_string()); }
+                            _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                        }
+                    }
+                    Type::Bool(second_val) => {
+                        match operator {
+                            // math
+                            Operator::Add => { return Type::String(first_val.to_string() + &second_val.to_string()); }
+                            // logical
+                            Operator::Equals => { return Type::Bool((first_val.len() == 0) != *second_val); }
+                            Operator::NotEquals => { return Type::Bool((first_val.len() != 0) != *second_val); }
+                            _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                        }
                     }
                     Type::String(second_val) => {
-                        return Type::String(first_val.to_string() + second_val);
+                        match operator {
+                            // math
+                            Operator::Add => { return Type::String(first_val.to_string() + second_val); }
+                            // logical
+                            Operator::Equals => { return Type::Bool(first_val == second_val); }
+                            Operator::NotEquals => { return Type::Bool(first_val != second_val); }
+                            Operator::MoreThan => { return Type::Bool(first_val.len() > second_val.len()); }
+                            Operator::LessThan => { return Type::Bool(first_val.len() < second_val.len()); }
+                            Operator::MoreThanOrEquals => { return Type::Bool(first_val.len() >= second_val.len()); }
+                            Operator::LessThanOrEquals => { return Type::Bool(first_val.len() <= second_val.len()); }
+                            _ => panic!("Invalid operator for comparison statement: {:?}", operator)
+                        }
                     }
                 }
             }
@@ -319,7 +321,7 @@ impl Interpreter {
                 let first_arg: Type = self.resolve_argument_value(arg1.unwrap());
                 let second_arg: Type = self.resolve_argument_value(arg2.unwrap());
 
-                if Interpreter::compare_type_vars(first_arg, second_arg, comparison_operator) {
+                if Interpreter::operate_on_types(first_arg, second_arg, comparison_operator) == Type::Bool(true) {
                     self.inst_ptr += 1;
                 } else {
                     // skip scope open and close at least
@@ -337,7 +339,7 @@ impl Interpreter {
                 let first_arg: Type = self.resolve_argument_value(arg1.unwrap());
                 let second_arg: Type = self.resolve_argument_value(arg2.unwrap());
 
-                if Interpreter::compare_type_vars(first_arg, second_arg, comparison_operator) {
+                if Interpreter::operate_on_types(first_arg, second_arg, comparison_operator) == Type::Bool(true) {
                     self.inst_ptr += 1;
                 } else {
                     // skip scope open and close at least

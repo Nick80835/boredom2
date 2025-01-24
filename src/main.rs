@@ -52,7 +52,7 @@ fn main() {
     astgen.generate_ast();
 
     for (index, token) in astgen.generated_ast.iter().enumerate() {
-        //println!("{} | {:?}", index, token);
+        println!("{} | {:?}", index, token);
     }
 
     let mut interpreter = Interpreter::init(astgen.generated_ast.clone());

@@ -1,5 +1,6 @@
-alloc var = 6;
+if "" {
+    print "debug";
+}
 
-set lol = 1;
-lol += 3 + var;
-print ""+lol+"\n";
+set a = 1 > 2;
+print a;
