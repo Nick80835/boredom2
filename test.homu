@@ -1,6 +1,5 @@
-alloc var = 0;
+alloc var = 6;
 
-while var < 3 {
-    set var = var + 1;
-    print "var = " + var + "\n";
-}
+set lol = 1;
+lol += 3 + var;
+print ""+lol+"\n";

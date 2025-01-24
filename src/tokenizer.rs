@@ -25,10 +25,14 @@ pub enum Token {
     NotEquals,
     MoreThan,
     LessThan,
+    MoreThanOrEquals,
+    LessThanOrEquals,
     BoolTrue,
     BoolFalse,
     Plus,
     Minus,
+    PlusEquals,
+    MinusEquals,
     Alloc,
     Set,
     Print,
@@ -133,21 +137,39 @@ impl Tokenizer {
             let token = token.clone();
             if token == Token::Whitespace || token == Token::Comment { continue; }
 
-            // coalesce "==" to Equals and "!=" to NotEquals
-            if
-                token == Token::Symbol('=')
-                && token_idx >= 1
-                && tokens[token_idx - 1] == Token::Symbol('=')
-            {
-                out_tokens.truncate(out_tokens.len() - 1);
-                out_tokens.push(Token::Equals);
-            } else if
-                token == Token::Symbol('=')
-                && token_idx >= 1
-                && tokens[token_idx - 1] == Token::Symbol('!')
-            {
-                out_tokens.truncate(out_tokens.len() - 1);
-                out_tokens.push(Token::NotEquals);
+            // coalesce *= to equivalent comparison tokens
+            if token == Token::Symbol('=') && token_idx >= 1 {
+                match &tokens[token_idx - 1] { // previous token
+                    // comparison
+                    Token::Symbol('=') => {
+                        out_tokens.truncate(out_tokens.len() - 1);
+                        out_tokens.push(Token::Equals);
+                    }
+                    Token::Symbol('!') => {
+                        out_tokens.truncate(out_tokens.len() - 1);
+                        out_tokens.push(Token::NotEquals);
+                    }
+                    Token::Symbol('>') => {
+                        out_tokens.truncate(out_tokens.len() - 1);
+                        out_tokens.push(Token::MoreThanOrEquals);
+                    }
+                    Token::Symbol('<') => {
+                        out_tokens.truncate(out_tokens.len() - 1);
+                        out_tokens.push(Token::LessThanOrEquals);
+                    }
+                    // math
+                    Token::Symbol('+') => {
+                        out_tokens.truncate(out_tokens.len() - 1);
+                        out_tokens.push(Token::PlusEquals);
+                    }
+                    Token::Symbol('-') => {
+                        out_tokens.truncate(out_tokens.len() - 1);
+                        out_tokens.push(Token::MinusEquals);
+                    }
+                    _ => {
+                        out_tokens.push(Tokenizer::unraw_token(token));
+                    }
+                }
             } else {
                 out_tokens.push(Tokenizer::unraw_token(token));
             }

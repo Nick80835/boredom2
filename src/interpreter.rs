@@ -120,6 +120,8 @@ impl Interpreter {
                         Comparison::NotEquals => { return first_val != second_val; }
                         Comparison::MoreThan => { return first_val > second_val; }
                         Comparison::LessThan => { return first_val < second_val; }
+                        Comparison::MoreThanOrEquals => { return first_val >= second_val; }
+                        Comparison::LessThanOrEquals => { return first_val <= second_val; }
                         _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                     }
                 }
@@ -132,6 +134,8 @@ impl Interpreter {
                         Comparison::NotEquals => { return first_val != second_val; }
                         Comparison::MoreThan => { return first_val > second_val; }
                         Comparison::LessThan => { return first_val < second_val; }
+                        Comparison::MoreThanOrEquals => { return first_val >= second_val; }
+                        Comparison::LessThanOrEquals => { return first_val <= second_val; }
                         _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                     }
                 }
@@ -144,6 +148,8 @@ impl Interpreter {
                         Comparison::NotEquals => { return first_val != second_val; }
                         Comparison::MoreThan => { return first_val.len() > second_val.len(); }
                         Comparison::LessThan => { return first_val.len() < second_val.len(); }
+                        Comparison::MoreThanOrEquals => { return first_val.len() >= second_val.len(); }
+                        Comparison::LessThanOrEquals => { return first_val.len() <= second_val.len(); }
                         _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                     }
                 }
