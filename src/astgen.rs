@@ -307,8 +307,6 @@ impl ASTGenerator {
                                 token_idx += 1;
                             }
 
-                            // skip closing array access
-                            token_idx += 1;
                             value_tokens.push(
                                 Value::Expression {
                                     values: vec![
@@ -434,7 +432,7 @@ impl ASTGenerator {
 
         if unorphaned_jumps != None {
             for orphan_idx in unorphaned_jumps.unwrap() {
-                self.generated_ast[*orphan_idx + 1] = ASTToken::of_type(
+                self.generated_ast[*orphan_idx] = ASTToken::of_type(
                     Statement::Jump(Some((self.generated_ast.len() - 1).to_owned()))
                 )
             }
@@ -453,7 +451,7 @@ impl ASTGenerator {
             ).or_insert_with(
                 Vec::new
             ).push(
-                (self.generated_ast.len() - 1).to_owned()
+                self.generated_ast.len().to_owned()
             );
 
             None

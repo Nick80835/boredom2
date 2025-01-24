@@ -1,2 +1,8 @@
 set var = [1];
 print var|1 - 1|;
+
+var += 16;
+print var|1|;
+set other = var|1| == 16;
+print "\n";
+print other;
