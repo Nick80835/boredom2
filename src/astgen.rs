@@ -313,7 +313,7 @@ impl ASTGenerator {
 
         if unorphaned_jumps != None {
             for orphan_idx in unorphaned_jumps.unwrap() {
-                self.generated_ast[*orphan_idx] = ASTToken::of_type(
+                self.generated_ast[*orphan_idx + 1] = ASTToken::of_type(
                     Statement::Jump(Some((self.generated_ast.len() - 1).to_owned()))
                 )
             }

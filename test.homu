@@ -1,12 +1,11 @@
-set iter = 0;
+#set a = 2;
 
-:test;
-print "out of label\n";
-
-if iter < 5 {
-    iter += 1;
-    print "in test\n";
-    jump test;
+if true {
+    print "in set";
+    set a = 3;
+    print a;
+    jump out;
 }
 
-print true;
+:out;
+print a;
