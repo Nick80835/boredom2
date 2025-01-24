@@ -1,5 +1,2 @@
 set var = [1];
-print var!0;
-var += "egg";
-print var!1;
-print "\n" + var!1 + " is a fine word";
+print var|1 - 1|;

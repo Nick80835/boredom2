@@ -216,9 +216,7 @@ impl Interpreter {
                         match operator {
                             // math
                             Operator::Add => { return Type::Array([first_val.to_owned(), vec![second].to_owned()].concat()); }
-                            Operator::ArrayAccess => {
-                                return first_val[*second_val as usize].to_owned();
-                            }
+                            Operator::ArrayAccess => { return first_val[*second_val as usize].to_owned(); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }

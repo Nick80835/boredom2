@@ -298,16 +298,26 @@ impl ASTGenerator {
                         Token::ArrayAccess => {
                             // accessing array from previous value token, coalesce
                             let array_value = value_tokens.pop().unwrap();
+                            let mut access_tokens: Vec<Token> = vec![];
+                            // skip opening array access
+                            token_idx += 1;
+
+                            while tokens[token_idx] != Token::ArrayAccess {
+                                access_tokens.push(tokens[token_idx].to_owned());
+                                token_idx += 1;
+                            }
+
+                            // skip closing array access
+                            token_idx += 1;
                             value_tokens.push(
                                 Value::Expression {
                                     values: vec![
                                         array_value,
-                                        ASTGenerator::resolve_token_read_like_expression(vec![tokens[token_idx + 1].to_owned()])
+                                        ASTGenerator::resolve_token_read_like_expression(access_tokens)
                                     ],
                                     operators: vec![Operator::ArrayAccess],
                                 }
                             );
-                            token_idx += 1; // we consumed the next one too
                         },
                         _ => panic!("{:?} passed as value for variable read token!", this_token),
                     }
