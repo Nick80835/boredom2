@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::tokenizer::Token;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,7 +31,7 @@ pub enum Statement {
     Empty,
     Block,
     BlockEnd,
-    Allocate,
+    Alloc,
     Set,
     DebugPrintCall,
     ReadLineCall,
@@ -37,6 +39,9 @@ pub enum Statement {
     // conditions
     If(Operator),
     While(Operator),
+    // jumps
+    Jump(Option<usize>),
+    Label(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -84,12 +89,21 @@ pub struct ASTGenerator {
     current_token_idx: usize,
     pub generated_ast: Vec<ASTToken>,
     scope_open_idxs: Vec<usize>,
+    // label name, label index
+    jump_table: HashMap<String, usize>,
+    // label name to jump to, vec of indexes of orphaned jump
+    orphaned_jumps: HashMap<String, Vec<usize>>,
 }
 
 impl ASTGenerator {
     pub fn init(tokens: Vec<Token>) -> Self {
         Self {
-            tokens, current_token_idx: 0, generated_ast: vec![], scope_open_idxs: vec![]
+            tokens,
+            current_token_idx: 0,
+            generated_ast: vec![],
+            scope_open_idxs: vec![],
+            jump_table: HashMap::new(),
+            orphaned_jumps: HashMap::new(),
         }
     }
     fn advance_and_get_token(&mut self) -> &Token {
@@ -152,6 +166,16 @@ impl ASTGenerator {
         match token {
             Token::Variable { name } => {
                 Value::Variable(name)
+            }
+            _ => {
+                panic!("{:?} passed as value for variable write token!", token)
+            }
+        }
+    }
+    fn resolve_variable_name_like_token(token: Token) -> Option<String> {
+        match token {
+            Token::Variable { name } => {
+                Some(name)
             }
             _ => {
                 panic!("{:?} passed as value for variable write token!", token)
@@ -278,7 +302,44 @@ impl ASTGenerator {
     fn insert_ast_token_at_end(&mut self, new_token: ASTToken) {
         self.generated_ast.push(new_token);
     }
+    fn insert_label(&mut self, new_label_name: String) {
+        self.jump_table.insert(new_label_name.to_owned(), self.generated_ast.len() - 1);
 
+        if !self.jump_table.contains_key(&new_label_name) {
+            self.jump_table.insert(new_label_name.to_owned(), self.generated_ast.len() - 1);
+        }
+
+        let unorphaned_jumps = self.orphaned_jumps.get(&new_label_name);
+
+        if unorphaned_jumps != None {
+            for orphan_idx in unorphaned_jumps.unwrap() {
+                self.generated_ast[*orphan_idx] = ASTToken::of_type(
+                    Statement::Jump(Some((self.generated_ast.len() - 1).to_owned()))
+                )
+            }
+
+            self.orphaned_jumps.remove(&new_label_name);
+        }
+    }
+    fn insert_jump_or_orphan(&mut self, jump_name: String) -> Option<usize> {
+        // returns the index of the label to jump to, or None if the label is currently unknown
+        let jump_index = self.jump_table.get(&jump_name);
+
+        if jump_index == None {
+            // orphan
+            self.orphaned_jumps.entry(
+                jump_name
+            ).or_insert_with(
+                Vec::new
+            ).push(
+                (self.generated_ast.len() - 1).to_owned()
+            );
+
+            None
+        } else {
+            Some(jump_index.unwrap().to_owned())
+        }
+    }
     pub fn generate_ast(&mut self) {
         self.insert_root_ast_scope(ASTToken::empty()); // root scope
 
@@ -299,6 +360,32 @@ impl ASTGenerator {
                 Token::EOF => {
                     self.scope_open_idxs.pop();
                     self.insert_ast_token_at_end(ASTToken::of_type(Statement::EOF));
+                }
+                Token::Label => {
+                    // create new label with name
+                    let label_name = ASTGenerator::resolve_variable_name_like_token(
+                        self.advance_and_get_token().to_owned()
+                    ).expect("Label name not passed to label!");
+
+                    self.insert_ast_token_at_end(ASTToken::of_type(
+                        Statement::Label(label_name.to_owned())
+                    ));
+                    self.insert_label(label_name);
+                    // check for line end
+                    assert_eq!(*self.peek_next_token().unwrap(), Token::LineEnd);
+                }
+                Token::Jump => {
+                    // create new jump
+                    let label_name = ASTGenerator::resolve_variable_name_like_token(
+                        self.advance_and_get_token().to_owned()
+                    ).expect("Label name not passed to jump!");
+
+                    let jump_idx = self.insert_jump_or_orphan(label_name);
+                    self.insert_ast_token_at_end(ASTToken::of_type(
+                        Statement::Jump(jump_idx)
+                    ));
+                    // check for line end
+                    assert_eq!(*self.peek_next_token().unwrap(), Token::LineEnd);
                 }
                 Token::If => {
                     let (value_tokens, comparisons) = self.resolve_any_value();
@@ -361,28 +448,37 @@ impl ASTGenerator {
                     self.advance_token(); // skip scope open
                 }
                 Token::Alloc => {
-                    // looking for Variable, Assign and any Literal or another Variable
+                    // get the variable to assign to
                     let variable_expression: Value = ASTGenerator::resolve_variable_write_like_token(
                         self.advance_and_get_token().to_owned()
                     );
-                    // just make sure the = is there
-                    if let Token::Assign = self.advance_and_get_token() {} else {
+
+                    // make sure the = is there
+                    if !ASTGenerator::token_is_assign_like(self.advance_and_get_token().to_owned()) {
                         panic!("{:?} passed as Assign to Alloc!", current_token)
                     }
-                    let mut new_value_tokens: Vec<Token> = vec![];
-                    while !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap().to_owned()) {
-                        new_value_tokens.push(self.advance_and_get_token().to_owned());
-                    }
-                    let new_value_expression: Value = ASTGenerator::resolve_token_read_like_expression(
-                        new_value_tokens
-                    );
 
-                    // build token
-                    let new_token: ASTToken = ASTToken::with_args(
-                        Statement::Allocate,
-                        variable_expression,
-                        Some(new_value_expression),
-                    );
+                    let (value_tokens, comparisons) = self.resolve_any_value();
+                    let new_token: ASTToken;
+
+                    if comparisons.len() == 0 {
+                        new_token = ASTToken::with_args_and_body(
+                            Statement::Alloc,
+                            variable_expression,
+                            Some(value_tokens.get(0).unwrap().to_owned()),
+                            self.generated_ast.len() + 1,
+                            None,
+                        );
+                    } else {
+                        new_token = ASTToken::with_args_and_body(
+                            Statement::Alloc,
+                            variable_expression,
+                            Some(Value::Expression { values: value_tokens, operators: comparisons }),
+                            self.generated_ast.len() + 1,
+                            None,
+                        );
+                    }
+
                     self.insert_ast_token_at_end(new_token);
                     // check for line end, alloc takes a fixed amount of args
                     assert_eq!(*self.peek_next_token().unwrap(), Token::LineEnd);
@@ -395,7 +491,7 @@ impl ASTGenerator {
 
                     // make sure the = is there
                     if !ASTGenerator::token_is_assign_like(self.advance_and_get_token().to_owned()) {
-                        panic!("{:?} passed as Assign to Alloc!", current_token)
+                        panic!("{:?} passed as Assign to Set!", current_token)
                     }
 
                     let (value_tokens, comparisons) = self.resolve_any_value();
@@ -420,7 +516,7 @@ impl ASTGenerator {
                     }
 
                     self.insert_ast_token_at_end(new_token);
-                    // check for line end, alloc takes a fixed amount of args
+                    // check for line end, set takes a fixed amount of args
                     assert_eq!(*self.peek_next_token().unwrap(), Token::LineEnd);
                 }
                 Token::Variable { name } => {
@@ -469,20 +565,23 @@ impl ASTGenerator {
                 }
                 Token::Print => {
                     // debug printing, takes 1 variable-like argument
-                    let mut new_value_tokens: Vec<Token> = vec![];
-                    while !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap().to_owned()) {
-                        new_value_tokens.push(self.advance_and_get_token().to_owned());
-                    }
-                    let new_value_expression: Value = ASTGenerator::resolve_token_read_like_expression(
-                        new_value_tokens
-                    );
+                    let (value_tokens, comparisons) = self.resolve_any_value();
+                    let new_token: ASTToken;
 
-                    // build token
-                    let new_token: ASTToken = ASTToken::with_args(
-                        Statement::DebugPrintCall,
-                        new_value_expression,
-                        None
-                    );
+                    if comparisons.len() == 0 {
+                        new_token = ASTToken::with_args(
+                            Statement::DebugPrintCall,
+                            value_tokens.get(0).unwrap().to_owned(),
+                            None,
+                        );
+                    } else {
+                        new_token = ASTToken::with_args(
+                            Statement::DebugPrintCall,
+                            Value::Expression { values: value_tokens, operators: comparisons },
+                            None,
+                        );
+                    }
+
                     self.insert_ast_token_at_end(new_token);
                     assert_eq!(*self.peek_next_token().unwrap(), Token::LineEnd);
                 }

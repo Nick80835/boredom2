@@ -1,6 +1,12 @@
-if "" {
-    print "debug";
+set iter = 0;
+
+:test;
+print "out of label\n";
+
+if iter < 5 {
+    iter += 1;
+    print "in test\n";
+    jump test;
 }
 
-set a = 1 > 2;
-print a;
+print true;
