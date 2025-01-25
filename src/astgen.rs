@@ -449,6 +449,7 @@ impl ASTGenerator {
                     assert_eq!(*self.peek_next_token().unwrap(), Token::LineEnd);
                 }
                 Token::Jump { src_line } => {
+                    eprintln!("{}Warning: JUMPING IS UNSAFE!{}", "\x1b[38;5;214m", "\x1b[0m");
                     // create new jump
                     let label_name = ASTGenerator::resolve_variable_name_like_token(
                         self.advance_and_get_token()
