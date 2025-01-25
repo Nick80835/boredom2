@@ -17,6 +17,8 @@ pub enum Token {
     Else,
     ScopeOpen,
     ScopeClose,
+    ParensOpen,
+    ParensClose,
     Assign,
     Is,
     ArrayAccess,
@@ -59,7 +61,9 @@ impl Tokenizer {
     fn char_idx_in_bounds(&self) -> bool { self.char_idx < self.get_current_line().len() }
     fn get_current_line(&self) -> &String { &self.lines[self.line_idx] }
     fn get_current_char(&self) -> char { self.get_current_line().chars().collect::<Vec<char>>()[self.char_idx] }
-    fn special_symbols() -> Vec<char> { vec!['?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '|'] }
+    fn special_symbols() -> Vec<char> {
+        vec!['?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '|', '(', ')']
+    }
 
     pub fn next_token(&mut self) -> Token {
         if !self.char_idx_in_bounds() {
@@ -130,6 +134,8 @@ impl Tokenizer {
                     '[' => Token::ArrayOpen,
                     ']' => Token::ArrayClose,
                     '|' => Token::ArrayAccess,
+                    '(' => Token::ParensOpen,
+                    ')' => Token::ParensClose,
                     _ => token,
                 }
             }

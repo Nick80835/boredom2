@@ -135,78 +135,6 @@ impl ASTGenerator {
             _ => panic!("{:?} passed as value for variable read token!", token),
         }
     }
-    fn resolve_token_read_like_expression(tokens: Vec<Token>) -> Value {
-        if tokens.len() < 2 {
-            return ASTGenerator::resolve_value_from_token(tokens.last().unwrap());
-        }
-
-        let mut value_tokens: Vec<Value> = vec![];
-        let mut operator_tokens: Vec<Operator> = vec![];
-        let mut array_scratch: Vec<Value> = vec![];
-        let mut token_idx = 0;
-
-        while token_idx < tokens.len() {
-            if tokens[token_idx] == Token::ArrayOpen {
-                // handle array
-                token_idx += 1;
-
-                while tokens[token_idx] != Token::ArrayClose {
-                    let this_token = tokens[token_idx].to_owned();
-
-                    if ASTGenerator::token_is_assign_like(&this_token)
-                    || ASTGenerator::token_is_assign_op_like(&this_token)
-                    || ASTGenerator::token_is_comparison_like(&this_token)
-                    || ASTGenerator::token_is_line_end(&this_token)
-                    || ASTGenerator::token_is_scope_like(&this_token) {
-                        panic!("Array incomplete!");
-                    }
-
-                    array_scratch.push(ASTGenerator::resolve_value_from_token(&this_token));
-                    token_idx += 1;
-                }
-
-                value_tokens.push(Value::Array(array_scratch.to_owned()));
-                array_scratch.clear();
-            } else {
-                let this_token = tokens[token_idx].to_owned();
-
-                match this_token {
-                    // values
-                    Token::IntegerLiteral { value: _ } => value_tokens.push(ASTGenerator::resolve_value_from_token(&this_token)),
-                    Token::StringLiteral { value: _ } => value_tokens.push(ASTGenerator::resolve_value_from_token(&this_token)),
-                    Token::BoolTrue => value_tokens.push(ASTGenerator::resolve_value_from_token(&this_token)),
-                    Token::BoolFalse => value_tokens.push(ASTGenerator::resolve_value_from_token(&this_token)),
-                    Token::Variable { name: _ } => value_tokens.push(ASTGenerator::resolve_value_from_token(&this_token)),
-                    // operators
-                    Token::Plus => operator_tokens.push(Operator::Add),
-                    Token::Minus => operator_tokens.push(Operator::Sub),
-                    Token::ArrayAccess => {
-                        // accessing array from previous value token, coalesce
-                        let array_value = value_tokens.pop().unwrap();
-                        value_tokens.push(
-                            Value::Expression {
-                                values: vec![
-                                    array_value,
-                                    ASTGenerator::resolve_token_read_like_expression(vec![tokens[token_idx + 1].to_owned()])
-                                ],
-                                operators: vec![Operator::ArrayAccess],
-                            }
-                        );
-                        token_idx += 1; // we consumed the next one too
-                    },
-                    _ => panic!("{:?} passed as value for variable read token!", this_token),
-                }
-            }
-
-            token_idx += 1;
-        }
-
-        assert_eq!(value_tokens.len() - 1, operator_tokens.len());
-        return Value::Expression {
-            values: value_tokens,
-            operators: operator_tokens
-        };
-    }
     fn resolve_variable_write_like_token(token: &Token) -> Value {
         match token {
             Token::Variable { name } => {
@@ -238,7 +166,7 @@ impl ASTGenerator {
             _ => panic!("{:?} passed as value for comparison-like token!", token),
         }
     }
-    fn resolve_any_value(&mut self) -> (Vec<Value>, Vec<Operator>) {
+    fn advance_and_gather_tokens_for_value(&mut self) -> Vec<Token> {
         let mut tokens: Vec<Token> = vec![];
 
         while
@@ -248,9 +176,12 @@ impl ASTGenerator {
             tokens.push(self.advance_and_get_token().to_owned());
         }
 
+        tokens
+    }
+    fn resolve_any_value(tokens: Vec<Token>) -> Value {
         if tokens.len() == 1 {
             // single literal
-            return (vec![ASTGenerator::resolve_token_read_like_expression(tokens)], vec![])
+            return ASTGenerator::resolve_value_from_token(tokens.get(0).unwrap());
         } else if tokens.len() > 1 {
             let mut array_scratch: Vec<Value> = vec![];
             let mut token_idx = 0;
@@ -272,8 +203,33 @@ impl ASTGenerator {
                         || ASTGenerator::token_is_scope_like(&this_token) {
                             panic!("Array incomplete!");
                         }
+
+                        match tokens[token_idx] {
+                            Token::ParensOpen => {
+                                // coalesce tokens in ()
+                                let mut parens_tokens: Vec<Token> = vec![];
+                                let mut parens_deep: usize = 0;
+                                // skip opening parens
+                                token_idx += 1;
     
-                        array_scratch.push(ASTGenerator::resolve_value_from_token(&this_token));
+                                while tokens[token_idx] != Token::ParensClose || parens_deep > 0 {
+                                    if tokens[token_idx] == Token::ParensOpen {
+                                        parens_deep += 1;
+                                    } else if tokens[token_idx] == Token::ParensClose {
+                                        parens_deep -= 1;
+                                    }
+    
+                                    parens_tokens.push(tokens[token_idx].to_owned());
+                                    token_idx += 1;
+                                }
+    
+                                array_scratch.push(ASTGenerator::resolve_any_value(parens_tokens));
+                            }
+                            _ => {
+                                array_scratch.push(ASTGenerator::resolve_value_from_token(&this_token));
+                            }
+                        }
+    
                         token_idx += 1;
                     }
     
@@ -311,12 +267,32 @@ impl ASTGenerator {
                                 Value::Expression {
                                     values: vec![
                                         array_value,
-                                        ASTGenerator::resolve_token_read_like_expression(access_tokens)
+                                        ASTGenerator::resolve_any_value(access_tokens)
                                     ],
                                     operators: vec![Operator::ArrayAccess],
                                 }
                             );
                         },
+                        Token::ParensOpen => {
+                            // coalesce tokens in ()
+                            let mut parens_tokens: Vec<Token> = vec![];
+                            let mut parens_deep: usize = 0;
+                            // skip opening parens
+                            token_idx += 1;
+
+                            while tokens[token_idx] != Token::ParensClose || parens_deep > 0 {
+                                if tokens[token_idx] == Token::ParensOpen {
+                                    parens_deep += 1;
+                                } else if tokens[token_idx] == Token::ParensClose {
+                                    parens_deep -= 1;
+                                }
+
+                                parens_tokens.push(tokens[token_idx].to_owned());
+                                token_idx += 1;
+                            }
+
+                            value_tokens.push(ASTGenerator::resolve_any_value(parens_tokens));
+                        }
                         _ => panic!("{:?} passed as value for variable read token!", this_token),
                     }
                 }
@@ -324,50 +300,22 @@ impl ASTGenerator {
                 token_idx += 1;
             }
 
-            return (value_tokens, operator_tokens);
-        } else if false {
-            let mut temp_tokens: Vec<Token> = vec![];
-            let mut token_sublists: Vec<Vec<Token>> = vec![];
-            let mut comparison_operators: Vec<Token> = vec![];
-
-            for token in tokens {
-                if ASTGenerator::token_is_comparison_like(&token) {
-                    // add new operator and move temp tokens to list of token lists
-                    comparison_operators.push(token.to_owned());
-                    token_sublists.push(temp_tokens.to_owned());
-                    temp_tokens.clear();
-                } else {
-                    temp_tokens.push(token.to_owned());
-                }
-            }
-
-            if temp_tokens.len() > 0 {
-                // get that last list
-                token_sublists.push(temp_tokens.to_owned());
-            }
-
-            let mut final_values: Vec<Value> = vec![];
-            let mut final_comparisons: Vec<Operator> = vec![];
-
-            if comparison_operators.len() > 0 {
-                for (index, token_sublist) in token_sublists.iter().enumerate() {
-                    final_values.push(ASTGenerator::resolve_token_read_like_expression(
-                        token_sublist.to_owned()
-                    ));
-
-                    if index > 0 {
-                        final_comparisons.push(ASTGenerator::resolve_comparison_like_token(
-                            comparison_operators.get(index - 1).unwrap()
-                        ));
-                    }
-                }
-
-                return (final_values, final_comparisons);
-            } else {
-                panic!("Invalid operand length!");
-            }
+            return Value::Expression {
+                values: value_tokens,
+                operators: operator_tokens
+            };
         } else {
             panic!("Invalid operand length!");
+        }
+    }
+    fn unpack_expression(expression: &Value) -> (Vec<Value>, Vec<Operator>) {
+        match expression {
+            Value::Expression { values, operators } => {
+                return (values.to_owned(), operators.to_owned());
+            }
+            _ => {
+                return (vec![expression.to_owned()], vec![]);
+            }
         }
     }
     fn token_is_comparison_like(token: &Token) -> bool {
@@ -507,23 +455,24 @@ impl ASTGenerator {
                     assert_eq!(*self.peek_next_token().unwrap(), Token::LineEnd);
                 }
                 Token::If => {
-                    let (value_tokens, comparisons) = self.resolve_any_value();
+                    let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
+                    let (values, operators) = ASTGenerator::unpack_expression(&value_token);
                     let new_token: ASTToken;
 
-                    if comparisons.len() == 0 {
+                    if operators.len() == 0 {
                         // implicit bool
                         new_token = ASTToken::with_args_and_body(
                             Statement::If(Operator::Equals),
-                            value_tokens[0].to_owned(),
+                            values[0].to_owned(),
                             Some(Value::BoolLiteral(true)),
                             self.generated_ast.len() + 1,
                             None,
                         );
                     } else {
                         new_token = ASTToken::with_args_and_body(
-                            Statement::If(comparisons[0].to_owned()),
-                            value_tokens[0].to_owned(),
-                            Some(value_tokens[1].to_owned()),
+                            Statement::If(operators[0].to_owned()),
+                            values[0].to_owned(),
+                            Some(values[1].to_owned()),
                             self.generated_ast.len() + 1,
                             None,
                         );
@@ -537,23 +486,24 @@ impl ASTGenerator {
                     self.advance_token(); // skip scope open
                 }
                 Token::While => {
-                    let (value_tokens, comparisons) = self.resolve_any_value();
+                    let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
+                    let (values, operators) = ASTGenerator::unpack_expression(&value_token);
                     let new_token: ASTToken;
 
-                    if comparisons.len() == 0 {
+                    if operators.len() == 0 {
                         // implicit bool
                         new_token = ASTToken::with_args_and_body(
                             Statement::While(Operator::Equals),
-                            value_tokens[0].to_owned(),
+                            values[0].to_owned(),
                             Some(Value::BoolLiteral(true)),
                             self.generated_ast.len() + 1,
                             None,
                         );
                     } else {
                         new_token = ASTToken::with_args_and_body(
-                            Statement::While(comparisons[0].to_owned()),
-                            value_tokens[0].to_owned(),
-                            Some(value_tokens[1].to_owned()),
+                            Statement::While(operators[0].to_owned()),
+                            values[0].to_owned(),
+                            Some(values[1].to_owned()),
                             self.generated_ast.len() + 1,
                             None,
                         );
@@ -577,14 +527,15 @@ impl ASTGenerator {
                         panic!("{:?} passed as Assign to Alloc!", current_token)
                     }
 
-                    let (value_tokens, comparisons) = self.resolve_any_value();
+                    let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
+                    let (values, operators) = ASTGenerator::unpack_expression(&value_token);
                     let new_token: ASTToken;
 
-                    if comparisons.len() == 0 {
+                    if operators.len() == 0 {
                         new_token = ASTToken::with_args_and_body(
                             Statement::Alloc,
                             variable_expression,
-                            Some(value_tokens.get(0).unwrap().to_owned()),
+                            Some(values.get(0).unwrap().to_owned()),
                             self.generated_ast.len() + 1,
                             None,
                         );
@@ -592,7 +543,7 @@ impl ASTGenerator {
                         new_token = ASTToken::with_args_and_body(
                             Statement::Alloc,
                             variable_expression,
-                            Some(Value::Expression { values: value_tokens, operators: comparisons }),
+                            Some(Value::Expression { values: values, operators: operators }),
                             self.generated_ast.len() + 1,
                             None,
                         );
@@ -613,14 +564,15 @@ impl ASTGenerator {
                         panic!("{:?} passed as Assign to Set!", current_token)
                     }
 
-                    let (value_tokens, comparisons) = self.resolve_any_value();
+                    let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
+                    let (values, operators) = ASTGenerator::unpack_expression(&value_token);
                     let new_token: ASTToken;
 
-                    if comparisons.len() == 0 {
+                    if operators.len() == 0 {
                         new_token = ASTToken::with_args_and_body(
                             Statement::Set,
                             variable_expression,
-                            Some(value_tokens.get(0).unwrap().to_owned()),
+                            Some(values.get(0).unwrap().to_owned()),
                             self.generated_ast.len() + 1,
                             None,
                         );
@@ -628,7 +580,7 @@ impl ASTGenerator {
                         new_token = ASTToken::with_args_and_body(
                             Statement::Set,
                             variable_expression,
-                            Some(Value::Expression { values: value_tokens, operators: comparisons }),
+                            Some(Value::Expression { values: values, operators: operators }),
                             self.generated_ast.len() + 1,
                             None,
                         );
@@ -647,7 +599,6 @@ impl ASTGenerator {
                             &Token::Variable { name: name.to_owned() }
                         );
                         let assign_op: Token;
-                        
 
                         match self.advance_and_get_token().to_owned() {
                             Token::PlusEquals => {
@@ -661,25 +612,20 @@ impl ASTGenerator {
                             }
                         }
 
-                        let mut new_value_tokens: Vec<Token> = vec![
-                            Token::Variable { name: name.to_owned() },
-                            assign_op
-                        ];
-
-                        while !ASTGenerator::token_is_line_end(self.peek_next_token().unwrap()) {
-                            new_value_tokens.push(self.advance_and_get_token().to_owned());
-                        }
-
-                        let new_value_expression: Value = ASTGenerator::resolve_token_read_like_expression(
-                            new_value_tokens
+                        let value_token = ASTGenerator::resolve_any_value(
+                            [
+                                vec![Token::Variable { name: name.to_owned() }, assign_op],
+                                self.advance_and_gather_tokens_for_value(),
+                            ].concat()
                         );
+
                         new_token = ASTToken::with_args(
                             Statement::Set,
                             variable_expression,
-                            Some(new_value_expression),
+                            Some(value_token),
                         );
                     } else {
-                        panic!("Mysterious variable at start of statement with no assign operator or index access!")
+                        panic!("Mysterious variable at start of statement with no assign operator!")
                     }
 
                     self.insert_ast_token_at_end(new_token);
@@ -688,19 +634,20 @@ impl ASTGenerator {
                 }
                 Token::Print => {
                     // debug printing, takes 1 variable-like argument
-                    let (value_tokens, comparisons) = self.resolve_any_value();
+                    let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
+                    let (values, operators) = ASTGenerator::unpack_expression(&value_token);
                     let new_token: ASTToken;
 
-                    if comparisons.len() == 0 {
+                    if operators.len() == 0 {
                         new_token = ASTToken::with_args(
                             Statement::DebugPrintCall,
-                            value_tokens.get(0).unwrap().to_owned(),
+                            values.get(0).unwrap().to_owned(),
                             None,
                         );
                     } else {
                         new_token = ASTToken::with_args(
                             Statement::DebugPrintCall,
-                            Value::Expression { values: value_tokens, operators: comparisons },
+                            Value::Expression { values: values, operators: operators },
                             None,
                         );
                     }

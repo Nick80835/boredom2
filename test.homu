@@ -1,8 +1,8 @@
-set var = [1];
-print var|1 - 1|;
-
+set var = [1 (2+6)];
+print var;
 var += 16;
-print var|1|;
-set other = var|1| == 16;
+print var|2|;
+set other = var|2| == 16;
 print "\n";
 print other;
+print (6 + 6);
