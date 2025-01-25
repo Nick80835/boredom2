@@ -515,21 +515,32 @@ impl ASTGenerator {
                     assert_eq!(self.peek_next_token().unwrap().token, Token::LineEnd);
                 }
                 Token::SubroutineReturn => {
-                    let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
-                    let (values, operators) = ASTGenerator::unpack_expression(&value_token);
                     let new_token: ASTToken;
 
-                    if operators.len() == 0 {
-                        new_token = ASTToken::with_args(
-                            Statement::SubroutineReturn,
-                            values.get(0).unwrap().to_owned(),
-                            None,
-                            current_token.src_line,
-                        );
+                    if self.peek_next_token().unwrap().token != Token::LineEnd {
+                        let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
+                        let (values, operators) = ASTGenerator::unpack_expression(&value_token);
+
+                        if operators.len() == 0 {
+                            new_token = ASTToken::with_args(
+                                Statement::SubroutineReturn,
+                                values.get(0).unwrap().to_owned(),
+                                None,
+                                current_token.src_line,
+                            );
+                        } else {
+                            new_token = ASTToken::with_args(
+                                Statement::SubroutineReturn,
+                                Value::Expression { values: values, operators: operators },
+                                None,
+                                current_token.src_line,
+                            );
+                        }
                     } else {
+                        // return false if no value was passed to ret
                         new_token = ASTToken::with_args(
                             Statement::SubroutineReturn,
-                            Value::Expression { values: values, operators: operators },
+                            Value::BoolLiteral(false),
                             None,
                             current_token.src_line,
                         );
