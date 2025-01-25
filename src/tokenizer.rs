@@ -37,6 +37,7 @@ pub enum Token {
     Set,
     ArrayOpen,
     ArrayClose,
+    ArrayLen,
     Print,
     ReadLine,
     LineEnd,
@@ -129,6 +130,7 @@ impl Tokenizer {
                     "call" => WrappedToken::from_with_line(Token::SubroutineCall, token.src_line),
                     "ret" => WrappedToken::from_with_line(Token::SubroutineReturn, token.src_line),
                     "sub" => WrappedToken::from_with_line(Token::SubroutineDefine, token.src_line),
+                    "len" => WrappedToken::from_with_line(Token::ArrayLen, token.src_line),
                     _ => WrappedToken::from_with_line(Token::Variable(value.to_string()), token.src_line),
                 }
             }

@@ -10,6 +10,7 @@ pub enum Value {
     Variable(String),
     Array(Vec<Value>),
     Return,
+    ArrayLen,
     Expression {
         values: Vec<Value>,
         operators: Vec<Operator>,
@@ -144,6 +145,7 @@ impl ASTGenerator {
             Token::BoolTrue => Value::BoolLiteral(true),
             Token::BoolFalse => Value::BoolLiteral(false),
             Token::Variable(value) => Value::Variable(value.to_owned()),
+            Token::ArrayLen => Value::ArrayLen,
             _ => panic!("{:?} passed as value for variable read token!", token),
         }
     }
@@ -285,6 +287,7 @@ impl ASTGenerator {
                                 }
                             );
                         },
+                        Token::ArrayLen => value_tokens.push(Value::ArrayLen),
                         Token::ParensOpen => {
                             // coalesce tokens in ()
                             let mut parens_tokens: Vec<WrappedToken> = vec![];

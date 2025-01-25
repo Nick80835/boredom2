@@ -8,6 +8,7 @@ enum Type {
     String(String),
     Bool(bool),
     Array(Vec<Type>),
+    ArrayLen,
 }
 
 pub struct Interpreter {
@@ -111,6 +112,7 @@ impl Interpreter {
 
                     Type::Array(accumulator)
                 },
+                Value::ArrayLen => Type::ArrayLen,
                 Value::Return => {
                     self.return_value.to_owned().unwrap()
                 },
@@ -239,10 +241,19 @@ impl Interpreter {
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
+                    Type::ArrayLen => {
+                        match operator {
+                            Operator::ArrayAccess => { return Type::Integer(first_val.len() as u32); }
+                            _ => unreachable!()
+                        }
+                    }
                     _ => {
                         panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
                     }
                 }
+            }
+            _ => {
+                panic!("Invalid value passed for comparison initialization: {:?}", first);
             }
         }
     }
@@ -413,6 +424,7 @@ impl Interpreter {
                     Type::String(value) => print!("{}", value.replace("\\n", "\n")), // jank shit
                     Type::Bool(value) => print!("{}", value),
                     Type::Array(value) => print!("{:?}", value),
+                    _ => unreachable!(),
                 }
 
                 self.inst_ptr += 1;
