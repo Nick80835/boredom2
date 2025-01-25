@@ -9,6 +9,7 @@ pub enum Value {
     BoolLiteral(bool),
     Variable(String),
     Array(Vec<Value>),
+    Return,
     Expression {
         values: Vec<Value>,
         operators: Vec<Operator>,
@@ -44,6 +45,10 @@ pub enum Statement {
     // jumps
     Jump(Option<usize>),
     Label(String),
+    // subroutines
+    SubroutineCall(Option<usize>),
+    SubroutineReturn,
+    SubroutineDefine,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -95,7 +100,11 @@ pub struct ASTGenerator {
     // label name, label index
     jump_table: HashMap<String, usize>,
     // label name to jump to, vec of indexes of orphaned jump
-    orphaned_jumps: HashMap<String, Vec<usize>>,
+    jumps: HashMap<String, Vec<usize>>,
+    // subroutine name, subroutine index
+    subroutine_table: HashMap<String, usize>,
+    // subroutine name to call, vec of indexes of calls
+    subroutine_calls: HashMap<String, Vec<usize>>,
 }
 
 impl ASTGenerator {
@@ -106,7 +115,9 @@ impl ASTGenerator {
             generated_ast: vec![],
             scope_open_idxs: vec![],
             jump_table: HashMap::new(),
-            orphaned_jumps: HashMap::new(),
+            jumps: HashMap::new(),
+            subroutine_table: HashMap::new(),
+            subroutine_calls: HashMap::new(),
         }
     }
     fn advance_and_get_token(&mut self) -> &WrappedToken {
@@ -371,57 +382,72 @@ impl ASTGenerator {
     fn insert_ast_token_at_end(&mut self, new_token: ASTToken) {
         self.generated_ast.push(new_token);
     }
-    fn insert_label(&mut self, new_label_name: String, src_line: usize) {
-        self.jump_table.insert(new_label_name.to_owned(), self.generated_ast.len() - 1);
-
-        if !self.jump_table.contains_key(&new_label_name) {
-            self.jump_table.insert(new_label_name.to_owned(), self.generated_ast.len() - 1);
-        }
-
-        let unorphaned_jumps = self.orphaned_jumps.get(&new_label_name);
-
-        if unorphaned_jumps != None {
-            for orphan_idx in unorphaned_jumps.unwrap() {
-                self.generated_ast[*orphan_idx] = ASTToken::of_type(
-                    Statement::Jump(Some((self.generated_ast.len() - 1).to_owned())),
-                    src_line,
-                )
-            }
-
-            self.orphaned_jumps.remove(&new_label_name);
-        }
+    fn insert_label(&mut self, label_name: String) {
+        self.insert_ast_token_at_end(ASTToken::of_type(
+            Statement::Label(label_name.to_owned()),
+            0,
+        ));
+        self.jump_table.insert(label_name.to_owned(), self.generated_ast.len() - 1);
     }
-    fn insert_jump_or_orphan(&mut self, jump_name: String) -> Option<usize> {
-        // returns the index of the label to jump to, or None if the label is currently unknown
-        let jump_index = self.jump_table.get(&jump_name);
-
-        if jump_index == None {
-            // orphan
-            self.orphaned_jumps.entry(
-                jump_name
-            ).or_insert_with(
-                Vec::new
-            ).push(
-                self.generated_ast.len().to_owned()
-            );
-
-            None
-        } else {
-            Some(jump_index.unwrap().to_owned())
-        }
+    fn insert_dummy_jump(&mut self, jump_name: String, src_line: usize) {
+        self.insert_ast_token_at_end(ASTToken::of_type(
+            Statement::Jump(None),
+            src_line,
+        ));
+        self.jumps.entry(
+            jump_name
+        ).or_insert_with(
+            Vec::new
+        ).push(
+            self.generated_ast.len() - 1
+        );
+    }
+    fn insert_subroutine(&mut self, subroutine_name: String) {
+        self.insert_ast_token_at_end(ASTToken::of_type(
+            Statement::SubroutineDefine,
+            0,
+        ));
+        // index after definition, so the interpreter doesn't skip
+        self.subroutine_table.insert(subroutine_name.to_owned(), self.generated_ast.len());
+    }
+    fn insert_subroutine_call(&mut self, subroutine_name: String, src_line: usize) {
+        self.insert_ast_token_at_end(ASTToken::of_type(
+            Statement::SubroutineCall(None),
+            src_line,
+        ));
+        self.subroutine_calls.entry(
+            subroutine_name
+        ).or_insert_with(
+            Vec::new
+        ).push(
+            self.generated_ast.len() - 1
+        );
     }
     pub fn generate_ast(&mut self) {
         self.insert_root_ast_scope(ASTToken::empty(0)); // root scope
 
         while self.current_token_idx < self.tokens.len() {
             let current_token = self.get_token().to_owned();
-    
+
             match &current_token.token {
                 Token::ScopeOpen => {
                     self.insert_new_empty_ast_scope(current_token.src_line);
                 }
                 Token::ScopeClose => {
                     let closing_scope_idx = self.scope_open_idxs.pop().unwrap();
+
+                    if self.generated_ast[closing_scope_idx - 1].t_type == Statement::SubroutineDefine {
+                        // this is closing a function call, ensure the last token is return
+                        if self.generated_ast[self.generated_ast.len() - 1].t_type != Statement::SubroutineReturn {
+                            // just return false
+                            self.insert_ast_token_at_end(ASTToken::with_args(
+                                Statement::SubroutineReturn,
+                                Value::BoolLiteral(false),
+                                None,
+                                0,
+                            ));
+                        }
+                    }
                     self.generated_ast[closing_scope_idx].body_extent = Some(
                         self.generated_ast.len() - closing_scope_idx
                     );
@@ -437,14 +463,7 @@ impl ASTGenerator {
                         self.advance_and_get_token()
                     ).expect(&format!("Label name not passed to label on line {}!", current_token.src_line));
 
-                    self.insert_ast_token_at_end(ASTToken::of_type(
-                        Statement::Label(label_name.to_owned()),
-                        current_token.src_line,
-                    ));
-                    self.insert_label(
-                        label_name,
-                        current_token.src_line,
-                    );
+                    self.insert_label(label_name);
                     // check for line end
                     assert_eq!(self.peek_next_token().unwrap().token, Token::LineEnd);
                 }
@@ -455,13 +474,81 @@ impl ASTGenerator {
                         self.advance_and_get_token()
                     ).expect(&format!("Label name not passed to jump on line {}!", current_token.src_line));
 
-                    let jump_idx = self.insert_jump_or_orphan(label_name);
-                    self.insert_ast_token_at_end(ASTToken::of_type(
-                        Statement::Jump(jump_idx),
-                        current_token.src_line,
-                    ));
+                    self.insert_dummy_jump(label_name, current_token.src_line);
                     // check for line end
                     assert_eq!(self.peek_next_token().unwrap().token, Token::LineEnd);
+                }
+                Token::SubroutineCall => {
+                    let subroutine_name = ASTGenerator::resolve_variable_name_like_token(
+                        self.advance_and_get_token()
+                    ).unwrap();
+
+                    if self.peek_next_token().unwrap_or(
+                        &WrappedToken::from(Token::LineEnd)
+                    ).token == Token::LineEnd {
+                        // line end after sub name, just insert sub call
+                        self.insert_subroutine_call(
+                            subroutine_name, current_token.src_line
+                        );
+                    } else {
+                        // check for -> and variable name to assign return to
+                        if self.advance_and_get_token().token != Token::SubroutineDirect {
+                            panic!("{:?} passed as redirect to SubroutineCall on line {}!", current_token, current_token.src_line);
+                        }
+                        self.insert_subroutine_call(
+                            subroutine_name, current_token.src_line
+                        );
+                        // get the variable to assign to
+                        let variable_expression: Value = ASTGenerator::resolve_variable_write_like_token(
+                            self.advance_and_get_token()
+                        );
+                        // assign the special Return token to the variable
+                        let new_token = ASTToken::with_args(
+                            Statement::Set,
+                            variable_expression,
+                            Some(Value::Return),
+                            current_token.src_line,
+                        );
+                        self.insert_ast_token_at_end(new_token);
+                    }
+
+                    assert_eq!(self.peek_next_token().unwrap().token, Token::LineEnd);
+                }
+                Token::SubroutineReturn => {
+                    let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
+                    let (values, operators) = ASTGenerator::unpack_expression(&value_token);
+                    let new_token: ASTToken;
+
+                    if operators.len() == 0 {
+                        new_token = ASTToken::with_args(
+                            Statement::SubroutineReturn,
+                            values.get(0).unwrap().to_owned(),
+                            None,
+                            current_token.src_line,
+                        );
+                    } else {
+                        new_token = ASTToken::with_args(
+                            Statement::SubroutineReturn,
+                            Value::Expression { values: values, operators: operators },
+                            None,
+                            current_token.src_line,
+                        );
+                    }
+
+                    self.insert_ast_token_at_end(new_token);
+                    assert_eq!(self.peek_next_token().unwrap().token, Token::LineEnd);
+                }
+                Token::SubroutineDefine => {
+                    // name of new subroutine
+                    let subroutine_name = ASTGenerator::resolve_variable_name_like_token(
+                        self.advance_and_get_token()
+                    ).unwrap();
+                    // add subroutine token to stack
+                    self.insert_subroutine(subroutine_name);
+                    // check for block to execute after if statement
+                    assert_eq!(self.peek_next_token().unwrap().token, Token::ScopeOpen);
+                    self.insert_new_empty_ast_scope(current_token.src_line);
+                    self.advance_token(); // skip scope open
                 }
                 Token::If => {
                     let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
@@ -545,21 +632,17 @@ impl ASTGenerator {
                     let new_token: ASTToken;
 
                     if operators.len() == 0 {
-                        new_token = ASTToken::with_args_and_body(
+                        new_token = ASTToken::with_args(
                             Statement::Alloc,
                             variable_expression,
                             Some(values.get(0).unwrap().to_owned()),
-                            self.generated_ast.len() + 1,
-                            None,
                             current_token.src_line,
                         );
                     } else {
-                        new_token = ASTToken::with_args_and_body(
+                        new_token = ASTToken::with_args(
                             Statement::Alloc,
                             variable_expression,
                             Some(Value::Expression { values: values, operators: operators }),
-                            self.generated_ast.len() + 1,
-                            None,
                             current_token.src_line,
                         );
                     }
@@ -584,21 +667,17 @@ impl ASTGenerator {
                     let new_token: ASTToken;
 
                     if operators.len() == 0 {
-                        new_token = ASTToken::with_args_and_body(
+                        new_token = ASTToken::with_args(
                             Statement::Set,
                             variable_expression,
                             Some(values.get(0).unwrap().to_owned()),
-                            self.generated_ast.len() + 1,
-                            None,
                             current_token.src_line,
                         );
                     } else {
-                        new_token = ASTToken::with_args_and_body(
+                        new_token = ASTToken::with_args(
                             Statement::Set,
                             variable_expression,
                             Some(Value::Expression { values: values, operators: operators }),
-                            self.generated_ast.len() + 1,
-                            None,
                             current_token.src_line,
                         );
                     }
@@ -696,5 +775,31 @@ impl ASTGenerator {
 
             self.advance_token();
         }
+
+        // resolve jumps
+        for (key, value) in &self.jumps {
+            for jump_idx in value {
+                self.generated_ast[*jump_idx] = ASTToken::of_type(
+                    Statement::Jump(
+                        Some(*self.jump_table.get(key).unwrap())
+                    ),
+                    0,
+                )
+            }
+        }
+        self.jumps.clear();
+
+        // resolve subroutines
+        for (key, value) in &self.subroutine_calls {
+            for call_idx in value {
+                self.generated_ast[*call_idx] = ASTToken::of_type(
+                    Statement::SubroutineCall(
+                        Some(*self.subroutine_table.get(key).unwrap())
+                    ),
+                    0,
+                )
+            }
+        }
+        self.subroutine_calls.clear();
     }
 }

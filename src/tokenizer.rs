@@ -17,7 +17,10 @@ pub enum Token {
     ParensClose,
     Assign,
     ArrayAccess,
-    Question,
+    SubroutineCall,
+    SubroutineDirect,
+    SubroutineReturn,
+    SubroutineDefine,
     Equals,
     NotEquals,
     MoreThan,
@@ -123,12 +126,14 @@ impl Tokenizer {
                     "true" => WrappedToken::from(Token::BoolTrue),
                     "false" => WrappedToken::from(Token::BoolFalse),
                     "jump" => WrappedToken::from_with_line(Token::Jump, token.src_line),
+                    "call" => WrappedToken::from_with_line(Token::SubroutineCall, token.src_line),
+                    "ret" => WrappedToken::from_with_line(Token::SubroutineReturn, token.src_line),
+                    "sub" => WrappedToken::from_with_line(Token::SubroutineDefine, token.src_line),
                     _ => WrappedToken::from_with_line(Token::Variable(value.to_string()), token.src_line),
                 }
             }
             Token::Symbol(value) => {
                 match value {
-                    '?' => WrappedToken::from(Token::Question),
                     '=' => WrappedToken::from(Token::Assign),
                     '{' => WrappedToken::from_with_line(Token::ScopeOpen, token.src_line),
                     '}' => WrappedToken::from_with_line(Token::ScopeClose, token.src_line),
@@ -162,44 +167,59 @@ impl Tokenizer {
             }
 
             // coalesce *= to equivalent comparison tokens
-            if let Token::Symbol('=') = token.token {
-                if token_idx < 1 {
-                    out_tokens.push(Tokenizer::unraw_token(token));
-                } else {
-                    match &tokens[token_idx - 1].token { // get and replace previous token
-                        // comparison
-                        Token::Symbol('=') => {
-                            out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(WrappedToken::from(Token::Equals));
-                        }
-                        Token::Symbol('!') => {
-                            out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(WrappedToken::from(Token::NotEquals));
-                        }
-                        Token::Symbol('>') => {
-                            out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(WrappedToken::from(Token::MoreThanOrEquals));
-                        }
-                        Token::Symbol('<') => {
-                            out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(WrappedToken::from(Token::LessThanOrEquals));
-                        }
-                        // math
-                        Token::Symbol('+') => {
-                            out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(WrappedToken::from(Token::PlusEquals));
-                        }
-                        Token::Symbol('-') => {
-                            out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(WrappedToken::from(Token::MinusEquals));
-                        }
-                        _ => {
-                            out_tokens.push(Tokenizer::unraw_token(token));
+            if token_idx < 1 {
+                out_tokens.push(Tokenizer::unraw_token(token));
+            } else {
+                match token.token {
+                    Token::Symbol('=') => {
+                        match &tokens[token_idx - 1].token { // get and replace previous token
+                            // comparison
+                            Token::Symbol('=') => {
+                                out_tokens.truncate(out_tokens.len() - 1);
+                                out_tokens.push(WrappedToken::from(Token::Equals));
+                            }
+                            Token::Symbol('!') => {
+                                out_tokens.truncate(out_tokens.len() - 1);
+                                out_tokens.push(WrappedToken::from(Token::NotEquals));
+                            }
+                            Token::Symbol('>') => {
+                                out_tokens.truncate(out_tokens.len() - 1);
+                                out_tokens.push(WrappedToken::from(Token::MoreThanOrEquals));
+                            }
+                            Token::Symbol('<') => {
+                                out_tokens.truncate(out_tokens.len() - 1);
+                                out_tokens.push(WrappedToken::from(Token::LessThanOrEquals));
+                            }
+                            // math
+                            Token::Symbol('+') => {
+                                out_tokens.truncate(out_tokens.len() - 1);
+                                out_tokens.push(WrappedToken::from(Token::PlusEquals));
+                            }
+                            Token::Symbol('-') => {
+                                out_tokens.truncate(out_tokens.len() - 1);
+                                out_tokens.push(WrappedToken::from(Token::MinusEquals));
+                            }
+                            _ => {
+                                out_tokens.push(Tokenizer::unraw_token(token));
+                            }
                         }
                     }
+                    Token::Symbol('>') => {
+                        match &tokens[token_idx - 1].token { // get and replace previous token
+                            // subroutine call
+                            Token::Symbol('-') => {
+                                out_tokens.truncate(out_tokens.len() - 1);
+                                out_tokens.push(WrappedToken::from(Token::SubroutineDirect));
+                            }
+                            _ => {
+                                out_tokens.push(Tokenizer::unraw_token(token));
+                            }
+                        }
+                    }
+                    _ => {
+                        out_tokens.push(Tokenizer::unraw_token(token));
+                    }
                 }
-            } else {
-                out_tokens.push(Tokenizer::unraw_token(token));
             }
         }
 

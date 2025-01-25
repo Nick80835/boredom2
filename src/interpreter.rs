@@ -18,7 +18,9 @@ pub struct Interpreter {
     variable_map: HashMap<String, usize>,
     mem_scope_start_stack: Vec<usize>,
     loop_stack: Vec<usize>,
-    return_stack: Vec<usize>,
+    // return address, scopes deep
+    return_stack: Vec<(usize, usize)>,
+    return_value: Option<Type>,
 }
 
 impl Interpreter {
@@ -32,6 +34,7 @@ impl Interpreter {
             mem_scope_start_stack: vec![0],
             loop_stack: vec![],
             return_stack: vec![],
+            return_value: None,
         }
     }
     fn current_inst(&self) -> &ASTToken {
@@ -108,7 +111,9 @@ impl Interpreter {
 
                     Type::Array(accumulator)
                 },
-                _ => panic!("Malformed argument expression!"),
+                Value::Return => {
+                    self.return_value.to_owned().unwrap()
+                },
             }
         }
     }
@@ -239,9 +244,6 @@ impl Interpreter {
                     }
                 }
             }
-            _ => {
-                panic!("Operating on a type that can't be operated on!");
-            }
         }
     }
 
@@ -272,6 +274,10 @@ impl Interpreter {
                 self.mem_scope_start_stack.push(self.memory_cells.len());
                 self.loop_stack.push(self.inst_ptr);
                 self.inst_ptr += 1;
+
+                if self.return_stack.len() > 0 {
+                    self.return_stack.last_mut().unwrap().1 += 1;
+                }
             }
             ASTToken {
                 t_type: Statement::BlockEnd,
@@ -284,6 +290,11 @@ impl Interpreter {
             } => {
                 let loop_idx = self.loop_stack.pop().unwrap() - 1;
                 self.invalidate_current_scope();
+
+                if self.return_stack.len() > 0 {
+                    self.return_stack.last_mut().unwrap().1 -= 1;
+                }
+
                 let previous_token = self.get_inst(loop_idx);
 
                 if loop_idx > 0 {
@@ -301,6 +312,52 @@ impl Interpreter {
                         self.inst_ptr += 1;
                     }
                 }
+            }
+            ASTToken {
+                t_type: Statement::SubroutineCall(sub_idx),
+                arg1: _,
+                arg2: _,
+                body_idx: _,
+                body_extent: _,
+                else_body_idx: _,
+                src_line: _,
+            } => {
+                self.mem_scope_start_stack.push(self.memory_cells.len());
+                // return to token after this call
+                self.return_stack.push((self.inst_ptr + 1, 0));
+                self.inst_ptr = sub_idx.unwrap();
+            }
+            ASTToken {
+                t_type: Statement::SubroutineReturn,
+                arg1,
+                arg2: _,
+                body_idx: _,
+                body_extent: _,
+                else_body_idx: _,
+                src_line: _,
+            } => {
+                self.return_value = Some(self.resolve_argument_value(arg1.unwrap()));
+                // invalidate base function scope at least
+                self.invalidate_current_scope();
+    
+                for _ in 0..self.return_stack.last().unwrap().1 {
+                    // invalidate for every scope remaining in function
+                    self.invalidate_current_scope();
+                }
+
+                self.inst_ptr = self.return_stack.pop().unwrap().0;
+            }
+            ASTToken {
+                t_type: Statement::SubroutineDefine,
+                arg1: _,
+                arg2: _,
+                body_idx: _,
+                body_extent: _,
+                else_body_idx: _,
+                src_line: _,
+            } => {
+                // skip over subroutine when not called
+                self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
             }
             ASTToken {
                 t_type: Statement::Alloc,
