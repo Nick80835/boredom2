@@ -1,8 +1,21 @@
-set var = [1 (2+6)];
-print var;
-var += 16;
-print var|2|;
-set other = var|2| == 16;
-print "\n";
-print other;
-print (6 + 6);
+sub remove_arr_index {
+    # index is idx_to_rem
+    # array is arr_arg
+    set i = 0;
+    set out_arr = [];
+
+    while i < arr_arg. {
+        if i != idx_to_rem {
+            out_arr += arr_arg|i|;
+        }
+
+        i += 1;
+    }
+
+    ret out_arr;
+}
+
+set arr_arg = [1 2 3];
+set idx_to_rem = 1;
+call remove_arr_index->arr_arg;
+print arr_arg;

@@ -37,13 +37,13 @@ pub enum Token {
     Set,
     ArrayOpen,
     ArrayClose,
-    ArrayLen,
     Print,
     ReadLine,
     LineEnd,
     Label,
     Jump,
     Variable(String),
+    LenAccess,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -74,7 +74,7 @@ impl Tokenizer {
     fn get_current_line(&self) -> &String { &self.lines[self.line_idx] }
     fn get_current_char(&self) -> char { self.get_current_line().chars().collect::<Vec<char>>()[self.char_idx] }
     fn special_symbols() -> Vec<char> {
-        vec!['!', '?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '|', '(', ')']
+        vec!['!', '?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '|', '(', ')', '.']
     }
 
     pub fn next_token(&mut self) -> WrappedToken {
@@ -130,7 +130,6 @@ impl Tokenizer {
                     "call" => WrappedToken::from_with_line(Token::SubroutineCall, token.src_line),
                     "ret" => WrappedToken::from_with_line(Token::SubroutineReturn, token.src_line),
                     "sub" => WrappedToken::from_with_line(Token::SubroutineDefine, token.src_line),
-                    "len" => WrappedToken::from_with_line(Token::ArrayLen, token.src_line),
                     _ => WrappedToken::from_with_line(Token::Variable(value.to_string()), token.src_line),
                 }
             }
@@ -148,6 +147,7 @@ impl Tokenizer {
                     '[' => WrappedToken::from(Token::ArrayOpen),
                     ']' => WrappedToken::from(Token::ArrayClose),
                     '|' => WrappedToken::from(Token::ArrayAccess),
+                    '.' => WrappedToken::from(Token::LenAccess),
                     '(' => WrappedToken::from(Token::ParensOpen),
                     ')' => WrappedToken::from(Token::ParensClose),
                     _ => token,
