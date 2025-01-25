@@ -1,22 +1,36 @@
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
-    RawIdentifier(String),
+    RawIdentifier {
+        src_line: usize,
+        value: String,
+    },
     IntegerLiteral {
         value: u32,
     },
     StringLiteral {
         value: String,
     },
-    Symbol(char),
+    Symbol {
+        src_line: usize,
+        value: char,
+    },
     Whitespace,
     Comment,
     EOF,
     // special tokens, returned by post_process
-    If,
-    While,
+    If {
+        src_line: usize,
+    },
+    While {
+        src_line: usize,
+    },
     Else,
-    ScopeOpen,
-    ScopeClose,
+    ScopeOpen {
+        src_line: usize,
+    },
+    ScopeClose {
+        src_line: usize,
+    },
     ParensOpen,
     ParensClose,
     Assign,
@@ -35,17 +49,30 @@ pub enum Token {
     Minus,
     PlusEquals,
     MinusEquals,
-    Alloc,
-    Set,
+    Alloc {
+        src_line: usize,
+    },
+    Set {
+        src_line: usize,
+    },
     ArrayOpen,
     ArrayClose,
-    Print,
-    ReadLine,
+    Print {
+        src_line: usize,
+    },
+    ReadLine {
+        src_line: usize,
+    },
     LineEnd,
-    Label,
-    Jump,
+    Label {
+        src_line: usize,
+    },
+    Jump {
+        src_line: usize,
+    },
     Variable {
-        name: String
+        src_line: usize,
+        name: String,
     },
 }
 
@@ -95,42 +122,42 @@ impl Tokenizer {
             return self.consume_comment();
         } else if Tokenizer::special_symbols().contains(&this_char) {
             self.char_idx += 1;
-            return Token::Symbol(this_char);
+            return Token::Symbol { src_line: self.line_idx + 1, value: this_char };
         } else {
-            panic!("Unknown char '{}' at line {}, exiting.", this_char, self.line_idx)
+            panic!("Unknown char '{}' at line {}, exiting.", this_char, self.line_idx + 1)
         }
     }
 
     fn unraw_token(token: Token) -> Token {
         match &token {
-            Token::RawIdentifier(id) => {
-                match id.as_str() {
-                    "if" => Token::If,
-                    "while" => Token::While,
+            Token::RawIdentifier { src_line, value } => {
+                match value.as_str() {
+                    "if" => Token::If { src_line: *src_line },
+                    "while" => Token::While { src_line: *src_line },
                     "is" => Token::Is,
                     "else" => Token::Else,
-                    "alloc" => Token::Alloc,
-                    "set" => Token::Set,
-                    "print" => Token::Print,
-                    "readln" => Token::ReadLine,
+                    "alloc" => Token::Alloc { src_line: *src_line },
+                    "set" => Token::Set { src_line: *src_line },
+                    "print" => Token::Print { src_line: *src_line },
+                    "readln" => Token::ReadLine { src_line: *src_line },
                     "true" => Token::BoolTrue,
                     "false" => Token::BoolFalse,
-                    "jump" => Token::Jump,
-                    _ => Token::Variable{ name: id.to_string() },
+                    "jump" => Token::Jump { src_line: *src_line },
+                    _ => Token::Variable{ src_line: *src_line, name: value.to_string() },
                 }
             }
-            Token::Symbol(sym) => {
-                match sym {
+            Token::Symbol { src_line, value } => {
+                match value {
                     '?' => Token::Question,
                     '=' => Token::Assign,
-                    '{' => Token::ScopeOpen,
-                    '}' => Token::ScopeClose,
+                    '{' => Token::ScopeOpen { src_line: *src_line },
+                    '}' => Token::ScopeClose { src_line: *src_line },
                     '>' => Token::MoreThan,
                     '<' => Token::LessThan,
                     ';' => Token::LineEnd,
                     '+' => Token::Plus,
                     '-' => Token::Minus,
-                    ':' => Token::Label,
+                    ':' => Token::Label { src_line: *src_line },
                     '[' => Token::ArrayOpen,
                     ']' => Token::ArrayClose,
                     '|' => Token::ArrayAccess,
@@ -152,36 +179,40 @@ impl Tokenizer {
             if token == Token::Whitespace || token == Token::Comment { continue; }
 
             // coalesce *= to equivalent comparison tokens
-            if token == Token::Symbol('=') && token_idx >= 1 {
-                match &tokens[token_idx - 1] { // previous token
-                    // comparison
-                    Token::Symbol('=') => {
-                        out_tokens.truncate(out_tokens.len() - 1);
-                        out_tokens.push(Token::Equals);
-                    }
-                    Token::Symbol('!') => {
-                        out_tokens.truncate(out_tokens.len() - 1);
-                        out_tokens.push(Token::NotEquals);
-                    }
-                    Token::Symbol('>') => {
-                        out_tokens.truncate(out_tokens.len() - 1);
-                        out_tokens.push(Token::MoreThanOrEquals);
-                    }
-                    Token::Symbol('<') => {
-                        out_tokens.truncate(out_tokens.len() - 1);
-                        out_tokens.push(Token::LessThanOrEquals);
-                    }
-                    // math
-                    Token::Symbol('+') => {
-                        out_tokens.truncate(out_tokens.len() - 1);
-                        out_tokens.push(Token::PlusEquals);
-                    }
-                    Token::Symbol('-') => {
-                        out_tokens.truncate(out_tokens.len() - 1);
-                        out_tokens.push(Token::MinusEquals);
-                    }
-                    _ => {
-                        out_tokens.push(Tokenizer::unraw_token(token));
+            if let Token::Symbol { src_line: _, value: '=' } = token {
+                if token_idx < 1 {
+                    out_tokens.push(Tokenizer::unraw_token(token));
+                } else {
+                    match &tokens[token_idx - 1] { // previous token
+                        // comparison
+                        Token::Symbol { src_line: _, value: '=' } => {
+                            out_tokens.truncate(out_tokens.len() - 1);
+                            out_tokens.push(Token::Equals);
+                        }
+                        Token::Symbol { src_line: _, value: '!' } => {
+                            out_tokens.truncate(out_tokens.len() - 1);
+                            out_tokens.push(Token::NotEquals);
+                        }
+                        Token::Symbol { src_line: _, value: '>' } => {
+                            out_tokens.truncate(out_tokens.len() - 1);
+                            out_tokens.push(Token::MoreThanOrEquals);
+                        }
+                        Token::Symbol { src_line: _, value: '<' } => {
+                            out_tokens.truncate(out_tokens.len() - 1);
+                            out_tokens.push(Token::LessThanOrEquals);
+                        }
+                        // math
+                        Token::Symbol { src_line: _, value: '+' } => {
+                            out_tokens.truncate(out_tokens.len() - 1);
+                            out_tokens.push(Token::PlusEquals);
+                        }
+                        Token::Symbol { src_line: _, value: '-' } => {
+                            out_tokens.truncate(out_tokens.len() - 1);
+                            out_tokens.push(Token::MinusEquals);
+                        }
+                        _ => {
+                            out_tokens.push(Tokenizer::unraw_token(token));
+                        }
                     }
                 }
             } else {
@@ -194,10 +225,10 @@ impl Tokenizer {
 
         for (token_idx, token) in out_tokens.iter().enumerate() {
             match token {
-                Token::ScopeOpen => {
+                Token::ScopeOpen { src_line: _ } => {
                     scope_open_idxs.push(token_idx);
                 }
-                Token::ScopeClose => {
+                Token::ScopeClose { src_line: _ } => {
                     scope_open_idxs.pop();
                 }
                 _ => {
@@ -232,7 +263,7 @@ impl Tokenizer {
             self.char_idx += 1
         }
 
-        Token::RawIdentifier(identifier_str)
+        Token::RawIdentifier { src_line: self.line_idx + 1 , value: identifier_str }
     }
 
     fn consume_string_literal(&mut self) -> Token {

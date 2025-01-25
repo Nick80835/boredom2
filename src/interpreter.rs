@@ -256,6 +256,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                src_line: _,
             } => {
                 self.halted = true;
             }
@@ -266,6 +267,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                src_line: _,
             } => {
                 self.mem_scope_start_stack.push(self.memory_cells.len());
                 self.loop_stack.push(self.inst_ptr);
@@ -278,6 +280,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                src_line: _,
             } => {
                 let loop_idx = self.loop_stack.pop().unwrap() - 1;
                 self.invalidate_current_scope();
@@ -291,6 +294,7 @@ impl Interpreter {
                         body_idx: _,
                         body_extent: _,
                         else_body_idx: _,
+                        src_line: _,
                     } = previous_token {
                         self.inst_ptr = loop_idx;
                     } else {
@@ -305,6 +309,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                src_line,
             } => {
                 if let Some(Value::Variable(name)) = arg1 {
                     self.create_new_variable(
@@ -312,7 +317,7 @@ impl Interpreter {
                         self.resolve_argument_value(arg2.unwrap())
                     );
                 } else {
-                    panic!("Malformed allocate!")
+                    panic!("Malformed allocate on line {}!", src_line);
                 }
 
                 self.inst_ptr += 1;
@@ -324,6 +329,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                src_line,
             } => {
                 if let Some(Value::Variable(name)) = arg1 {
                     self.set_or_create_new_variable(
@@ -331,7 +337,7 @@ impl Interpreter {
                         self.resolve_argument_value(arg2.unwrap())
                     );
                 } else {
-                    panic!("Malformed set!")
+                    panic!("Malformed set on line {}!", src_line);
                 }
 
                 self.inst_ptr += 1;
@@ -343,6 +349,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                src_line: _,
             } => {
                 match self.resolve_argument_value(arg1.unwrap()) {
                     Type::Integer(value) => print!("{}", value),
@@ -360,6 +367,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                src_line: _,
             } => {
                 self.inst_ptr = jump_idx.unwrap();
             }
@@ -370,6 +378,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                src_line: _,
             } => {
                 let first_arg: Type = self.resolve_argument_value(arg1.unwrap());
                 let second_arg: Type = self.resolve_argument_value(arg2.unwrap());
@@ -388,6 +397,7 @@ impl Interpreter {
                 body_idx: _,
                 body_extent: _,
                 else_body_idx: _,
+                src_line: _,
             } => {
                 let first_arg: Type = self.resolve_argument_value(arg1.unwrap());
                 let second_arg: Type = self.resolve_argument_value(arg2.unwrap());
