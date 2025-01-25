@@ -74,7 +74,7 @@ impl Tokenizer {
     fn get_current_line(&self) -> &String { &self.lines[self.line_idx] }
     fn get_current_char(&self) -> char { self.get_current_line().chars().collect::<Vec<char>>()[self.char_idx] }
     fn special_symbols() -> Vec<char> {
-        vec!['?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '|', '(', ')']
+        vec!['!', '?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '|', '(', ')']
     }
 
     pub fn next_token(&mut self) -> WrappedToken {
@@ -94,7 +94,7 @@ impl Tokenizer {
 
         if this_char.is_ascii_digit() {
             return self.consume_integer();
-        } else if this_char.is_ascii_alphabetic() {
+        } else if this_char.is_ascii_alphabetic() || this_char == '_' {
             // identifiers can only start with a letter
             return self.consume_identifier();
         } else if this_char == '"' {
@@ -261,7 +261,7 @@ impl Tokenizer {
         let mut identifier_str = String::new();
 
         // identifiers may contain a number, only the start needs to be a letter
-        while self.char_idx_in_bounds() && self.get_current_char().is_ascii_alphanumeric() {
+        while self.char_idx_in_bounds() && (self.get_current_char().is_ascii_alphanumeric() || self.get_current_char() == '_') {
             identifier_str.push(self.get_current_char());
             self.char_idx += 1
         }

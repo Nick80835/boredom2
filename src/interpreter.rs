@@ -70,7 +70,7 @@ impl Interpreter {
         let addr = self.variable_map.get(&name);
 
         if addr == None {
-            panic!("Unknown variable name!");
+            panic!("Unknown variable name: {}", name);
         }
 
         let var = &self.memory_cells[*addr.unwrap()];
