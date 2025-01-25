@@ -1,40 +1,21 @@
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Token {
-    RawIdentifier {
-        src_line: usize,
-        value: String,
-    },
-    IntegerLiteral {
-        value: u32,
-    },
-    StringLiteral {
-        value: String,
-    },
-    Symbol {
-        src_line: usize,
-        value: char,
-    },
+    RawIdentifier(String),
+    IntegerLiteral(u32),
+    StringLiteral(String),
+    Symbol(char),
     Whitespace,
     Comment,
     EOF,
     // special tokens, returned by post_process
-    If {
-        src_line: usize,
-    },
-    While {
-        src_line: usize,
-    },
+    If,
+    While,
     Else,
-    ScopeOpen {
-        src_line: usize,
-    },
-    ScopeClose {
-        src_line: usize,
-    },
+    ScopeOpen,
+    ScopeClose,
     ParensOpen,
     ParensClose,
     Assign,
-    Is,
     ArrayAccess,
     Question,
     Equals,
@@ -49,31 +30,31 @@ pub enum Token {
     Minus,
     PlusEquals,
     MinusEquals,
-    Alloc {
-        src_line: usize,
-    },
-    Set {
-        src_line: usize,
-    },
+    Alloc,
+    Set,
     ArrayOpen,
     ArrayClose,
-    Print {
-        src_line: usize,
-    },
-    ReadLine {
-        src_line: usize,
-    },
+    Print,
+    ReadLine,
     LineEnd,
-    Label {
-        src_line: usize,
-    },
-    Jump {
-        src_line: usize,
-    },
-    Variable {
-        src_line: usize,
-        name: String,
-    },
+    Label,
+    Jump,
+    Variable(String),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct WrappedToken {
+    pub token: Token,
+    pub src_line: usize,
+}
+
+impl WrappedToken {
+    pub fn from(token: Token) -> Self {
+        Self { token, src_line: 0 }
+    }
+    pub fn from_with_line(token: Token, src_line: usize) -> Self {
+        Self { token, src_line }
+    }
 }
 
 pub struct Tokenizer {
@@ -92,7 +73,7 @@ impl Tokenizer {
         vec!['?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '|', '(', ')']
     }
 
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> WrappedToken {
         if !self.char_idx_in_bounds() {
             self.char_idx = 0;
             self.line_idx += 1;
@@ -102,7 +83,7 @@ impl Tokenizer {
             }
         }
         if !self.line_idx_in_bounds() {
-            return Token::EOF;
+            return WrappedToken::from(Token::EOF);
         }
 
         let this_char = self.get_current_char();
@@ -122,47 +103,46 @@ impl Tokenizer {
             return self.consume_comment();
         } else if Tokenizer::special_symbols().contains(&this_char) {
             self.char_idx += 1;
-            return Token::Symbol { src_line: self.line_idx + 1, value: this_char };
+            return WrappedToken::from_with_line(Token::Symbol(this_char), self.line_idx + 1);
         } else {
             panic!("Unknown char '{}' at line {}, exiting.", this_char, self.line_idx + 1)
         }
     }
 
-    fn unraw_token(token: Token) -> Token {
-        match &token {
-            Token::RawIdentifier { src_line, value } => {
+    fn unraw_token(token: WrappedToken) -> WrappedToken {
+        match &token.token {
+            Token::RawIdentifier(value) => {
                 match value.as_str() {
-                    "if" => Token::If { src_line: *src_line },
-                    "while" => Token::While { src_line: *src_line },
-                    "is" => Token::Is,
-                    "else" => Token::Else,
-                    "alloc" => Token::Alloc { src_line: *src_line },
-                    "set" => Token::Set { src_line: *src_line },
-                    "print" => Token::Print { src_line: *src_line },
-                    "readln" => Token::ReadLine { src_line: *src_line },
-                    "true" => Token::BoolTrue,
-                    "false" => Token::BoolFalse,
-                    "jump" => Token::Jump { src_line: *src_line },
-                    _ => Token::Variable{ src_line: *src_line, name: value.to_string() },
+                    "if" => WrappedToken::from_with_line(Token::If, token.src_line),
+                    "while" => WrappedToken::from_with_line(Token::While, token.src_line),
+                    "else" => WrappedToken::from(Token::Else),
+                    "alloc" => WrappedToken::from_with_line(Token::Alloc, token.src_line),
+                    "set" => WrappedToken::from_with_line(Token::Set, token.src_line),
+                    "print" => WrappedToken::from_with_line(Token::Print, token.src_line),
+                    "readln" => WrappedToken::from_with_line(Token::ReadLine, token.src_line),
+                    "true" => WrappedToken::from(Token::BoolTrue),
+                    "false" => WrappedToken::from(Token::BoolFalse),
+                    "jump" => WrappedToken::from_with_line(Token::Jump, token.src_line),
+                    _ => WrappedToken::from_with_line(Token::Variable(value.to_string()), token.src_line),
                 }
             }
-            Token::Symbol { src_line, value } => {
+            Token::Symbol(value) => {
                 match value {
-                    '?' => Token::Question,
-                    '=' => Token::Assign,
-                    '{' => Token::ScopeOpen { src_line: *src_line },
-                    '}' => Token::ScopeClose { src_line: *src_line },
-                    '>' => Token::MoreThan,
-                    '<' => Token::LessThan,
-                    ';' => Token::LineEnd,
-                    '+' => Token::Plus,
-                    '-' => Token::Minus,
-                    ':' => Token::Label { src_line: *src_line },
-                    '[' => Token::ArrayOpen,
-                    ']' => Token::ArrayClose,
-                    '|' => Token::ArrayAccess,
-                    '(' => Token::ParensOpen,
-                    ')' => Token::ParensClose,
+                    '?' => WrappedToken::from(Token::Question),
+                    '=' => WrappedToken::from(Token::Assign),
+                    '{' => WrappedToken::from_with_line(Token::ScopeOpen, token.src_line),
+                    '}' => WrappedToken::from_with_line(Token::ScopeClose, token.src_line),
+                    '>' => WrappedToken::from(Token::MoreThan),
+                    '<' => WrappedToken::from(Token::LessThan),
+                    ';' => WrappedToken::from(Token::LineEnd),
+                    '+' => WrappedToken::from(Token::Plus),
+                    '-' => WrappedToken::from(Token::Minus),
+                    ':' => WrappedToken::from_with_line(Token::Label, token.src_line),
+                    '[' => WrappedToken::from(Token::ArrayOpen),
+                    ']' => WrappedToken::from(Token::ArrayClose),
+                    '|' => WrappedToken::from(Token::ArrayAccess),
+                    '(' => WrappedToken::from(Token::ParensOpen),
+                    ')' => WrappedToken::from(Token::ParensClose),
                     _ => token,
                 }
             }
@@ -170,45 +150,48 @@ impl Tokenizer {
         }
     }
 
-    pub fn post_process(tokens: Vec<Token>) -> Vec<Token> {
-        let mut out_tokens: Vec<Token> = vec![];
+    pub fn post_process(tokens: Vec<WrappedToken>) -> Vec<WrappedToken> {
+        let mut out_tokens: Vec<WrappedToken> = vec![];
 
         // remove whitespace and coalesce some tokens
         for (token_idx, token) in tokens.iter().enumerate() {
             let token = token.clone();
-            if token == Token::Whitespace || token == Token::Comment { continue; }
+
+            if token.token == Token::Whitespace || token.token == Token::Comment {
+                continue;
+            }
 
             // coalesce *= to equivalent comparison tokens
-            if let Token::Symbol { src_line: _, value: '=' } = token {
+            if let Token::Symbol('=') = token.token {
                 if token_idx < 1 {
                     out_tokens.push(Tokenizer::unraw_token(token));
                 } else {
-                    match &tokens[token_idx - 1] { // previous token
+                    match &tokens[token_idx - 1].token { // get and replace previous token
                         // comparison
-                        Token::Symbol { src_line: _, value: '=' } => {
+                        Token::Symbol('=') => {
                             out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(Token::Equals);
+                            out_tokens.push(WrappedToken::from(Token::Equals));
                         }
-                        Token::Symbol { src_line: _, value: '!' } => {
+                        Token::Symbol('!') => {
                             out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(Token::NotEquals);
+                            out_tokens.push(WrappedToken::from(Token::NotEquals));
                         }
-                        Token::Symbol { src_line: _, value: '>' } => {
+                        Token::Symbol('>') => {
                             out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(Token::MoreThanOrEquals);
+                            out_tokens.push(WrappedToken::from(Token::MoreThanOrEquals));
                         }
-                        Token::Symbol { src_line: _, value: '<' } => {
+                        Token::Symbol('<') => {
                             out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(Token::LessThanOrEquals);
+                            out_tokens.push(WrappedToken::from(Token::LessThanOrEquals));
                         }
                         // math
-                        Token::Symbol { src_line: _, value: '+' } => {
+                        Token::Symbol('+') => {
                             out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(Token::PlusEquals);
+                            out_tokens.push(WrappedToken::from(Token::PlusEquals));
                         }
-                        Token::Symbol { src_line: _, value: '-' } => {
+                        Token::Symbol('-') => {
                             out_tokens.truncate(out_tokens.len() - 1);
-                            out_tokens.push(Token::MinusEquals);
+                            out_tokens.push(WrappedToken::from(Token::MinusEquals));
                         }
                         _ => {
                             out_tokens.push(Tokenizer::unraw_token(token));
@@ -224,11 +207,11 @@ impl Tokenizer {
         let mut scope_open_idxs: Vec<usize> = vec![];
 
         for (token_idx, token) in out_tokens.iter().enumerate() {
-            match token {
-                Token::ScopeOpen { src_line: _ } => {
+            match token.token {
+                Token::ScopeOpen => {
                     scope_open_idxs.push(token_idx);
                 }
-                Token::ScopeClose { src_line: _ } => {
+                Token::ScopeClose => {
                     scope_open_idxs.pop();
                 }
                 _ => {
@@ -241,7 +224,7 @@ impl Tokenizer {
         return out_tokens;
     }
 
-    fn consume_integer(&mut self) -> Token {
+    fn consume_integer(&mut self) -> WrappedToken {
         let mut digit_str = String::new();
 
         while self.char_idx_in_bounds() && self.get_current_char().is_ascii_digit() {
@@ -249,12 +232,10 @@ impl Tokenizer {
             self.char_idx += 1
         }
 
-        Token::IntegerLiteral {
-            value: u32::from_str_radix(&digit_str, 10).unwrap()
-        }
+        WrappedToken::from(Token::IntegerLiteral(u32::from_str_radix(&digit_str, 10).unwrap()))
     }
 
-    fn consume_identifier(&mut self) -> Token {
+    fn consume_identifier(&mut self) -> WrappedToken {
         let mut identifier_str = String::new();
 
         // identifiers may contain a number, only the start needs to be a letter
@@ -263,10 +244,10 @@ impl Tokenizer {
             self.char_idx += 1
         }
 
-        Token::RawIdentifier { src_line: self.line_idx + 1 , value: identifier_str }
+        WrappedToken::from_with_line(Token::RawIdentifier(identifier_str), self.line_idx + 1)
     }
 
-    fn consume_string_literal(&mut self) -> Token {
+    fn consume_string_literal(&mut self) -> WrappedToken {
         let mut literal_str = String::new();
         self.char_idx += 1; // go into bounds of string
 
@@ -276,24 +257,22 @@ impl Tokenizer {
         }
 
         self.char_idx += 1; // leave string bounds
-        Token::StringLiteral {
-            value: literal_str
-        }
+        WrappedToken::from(Token::StringLiteral(literal_str))
     }
 
-    fn consume_whitespace(&mut self) -> Token {
+    fn consume_whitespace(&mut self) -> WrappedToken {
         while self.char_idx_in_bounds() && self.get_current_char().is_ascii_whitespace() {
             self.char_idx += 1
         }
 
-        Token::Whitespace
+        WrappedToken::from(Token::Whitespace)
     }
 
-    fn consume_comment(&mut self) -> Token {
+    fn consume_comment(&mut self) -> WrappedToken {
         while self.char_idx_in_bounds() {
             self.char_idx += 1
         }
 
-        Token::Comment
+        WrappedToken::from(Token::Comment)
     }
 }

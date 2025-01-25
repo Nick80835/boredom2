@@ -6,7 +6,7 @@ mod interpreter;
 mod tokenizer;
 use astgen::ASTGenerator;
 use interpreter::Interpreter;
-use tokenizer::{Tokenizer, Token};
+use tokenizer::{Token, Tokenizer, WrappedToken};
 
 fn read_file(filename: &str) -> Vec<String> {
     let mut out_lines: Vec<String> = vec![];
@@ -34,10 +34,10 @@ fn main() {
     }
 
     let mut tokenizer = Tokenizer::init(read_file(&filepath.unwrap()));
-    let mut raw_tokens: Vec<Token> = vec![];
+    let mut raw_tokens: Vec<WrappedToken> = vec![];
     raw_tokens.push(tokenizer.next_token());
 
-    while raw_tokens.last().unwrap() != &Token::EOF {
+    while raw_tokens.last().unwrap().token != Token::EOF {
         raw_tokens.push(tokenizer.next_token());
     }
 
