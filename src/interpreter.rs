@@ -185,6 +185,8 @@ impl Interpreter {
                         match operator {
                             // math
                             Operator::Add => { return Type::String(first_val.to_string() + &second_val.to_string()); }
+                            // index access
+                            Operator::ArrayAccess => { return Type::String(first_val.chars().nth(*second_val as usize).unwrap().to_string().to_owned()); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
@@ -229,6 +231,7 @@ impl Interpreter {
                         match operator {
                             // math
                             Operator::Add => { return Type::Array([first_val.to_owned(), vec![second].to_owned()].concat()); }
+                            // index access
                             Operator::ArrayAccess => { return first_val[*second_val as usize].to_owned(); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
@@ -249,6 +252,7 @@ impl Interpreter {
                     }
                     Type::Null => {
                         match operator {
+                            // length access
                             Operator::LenAccess => { return Type::Integer(first_val.len() as u32); }
                             _ => unreachable!()
                         }
