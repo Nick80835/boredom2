@@ -37,6 +37,7 @@ pub enum Token {
     Set,
     ArrayOpen,
     ArrayClose,
+    Comma,
     Print,
     ReadLine,
     LineEnd,
@@ -74,7 +75,7 @@ impl Tokenizer {
     fn get_current_line(&self) -> &String { &self.lines[self.line_idx] }
     fn get_current_char(&self) -> char { self.get_current_line().chars().collect::<Vec<char>>()[self.char_idx] }
     fn special_symbols() -> Vec<char> {
-        vec!['!', '?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '|', '(', ')', '.']
+        vec!['!', '?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '|', '(', ')', '.', ',']
     }
 
     pub fn next_token(&mut self) -> WrappedToken {
@@ -150,6 +151,7 @@ impl Tokenizer {
                     '.' => WrappedToken::from(Token::LenAccess),
                     '(' => WrappedToken::from(Token::ParensOpen),
                     ')' => WrappedToken::from(Token::ParensClose),
+                    ',' => WrappedToken::from(Token::Comma),
                     _ => token,
                 }
             }

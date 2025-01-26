@@ -197,7 +197,7 @@ impl ASTGenerator {
             // single literal
             return ASTGenerator::resolve_value_from_token(tokens.get(0).unwrap());
         } else if tokens.len() > 1 {
-            let mut array_scratch: Vec<Value> = vec![];
+            let mut array_scratch: Vec<Vec<WrappedToken>> = vec![vec![]];
             let mut token_idx = 0;
             let mut value_tokens: Vec<Value> = vec![];
             let mut operator_tokens: Vec<Operator> = vec![];
@@ -237,17 +237,29 @@ impl ASTGenerator {
                                     token_idx += 1;
                                 }
     
-                                array_scratch.push(ASTGenerator::resolve_any_value(parens_tokens));
+                                array_scratch.last_mut().unwrap().extend(parens_tokens);
+                            }
+                            Token::Comma => {
+                                // make new token vector
+                                array_scratch.push(vec![]);
                             }
                             _ => {
-                                array_scratch.push(ASTGenerator::resolve_value_from_token(&this_token));
+                                array_scratch.last_mut().unwrap().push(this_token);
                             }
                         }
     
                         token_idx += 1;
                     }
-    
-                    value_tokens.push(Value::Array(array_scratch.to_owned()));
+
+                    let mut array_token_values: Vec<Value> = vec![];
+
+                    for token_vec in &array_scratch {
+                        if token_vec.len() > 0 {
+                            array_token_values.push(ASTGenerator::resolve_any_value(token_vec.to_owned()));
+                        }
+                    }
+
+                    value_tokens.push(Value::Array(array_token_values));
                     array_scratch.clear();
                 } else if ASTGenerator::token_is_comparison_like(&tokens[token_idx]) {
                     // add new operator and move temp tokens to list of token lists
