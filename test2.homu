@@ -1,0 +1,10 @@
+set arr = "string test";
+print arr;
+print "\n";
+print arr.popfront;
+print "\n";
+print arr;
+print "\n";
+print arr.pop;
+print "\n";
+print arr;

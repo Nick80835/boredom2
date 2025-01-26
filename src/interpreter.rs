@@ -11,6 +11,21 @@ pub enum Type {
     Null,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct WrappedType {
+    value: Type,
+    addr: Option<usize>,
+}
+
+impl WrappedType {
+    pub fn from(value: Type) -> Self {
+        Self { value, addr: None }
+    }
+    pub fn from_with_addr(value: Type, addr: usize) -> Self {
+        Self { value, addr: Some(addr) }
+    }
+}
+
 pub struct Interpreter {
     pub ast_tokens: Vec<ASTToken>,
     pub halted: bool,
@@ -66,7 +81,7 @@ impl Interpreter {
             self.create_new_variable(name, value);
         }
     }
-    fn resolve_variable_by_name(&self, name: String) -> Type {
+    fn resolve_variable_by_name(&self, name: String) -> WrappedType {
         let addr = self.variable_map.get(&name);
 
         if addr == None {
@@ -74,30 +89,32 @@ impl Interpreter {
         }
 
         let var = &self.memory_cells[*addr.unwrap()];
-        return var.to_owned();
+        return WrappedType::from_with_addr(var.to_owned(), addr.unwrap().to_owned());
     }
-    fn resolve_argument_value(&self, argument: Value) -> Type {
+    fn resolve_argument_value(&mut self, argument: Value) -> WrappedType {
         if let Value::Variable(name) = argument {
             self.resolve_variable_by_name(name)
         } else {
             match argument {
-                Value::IntegerLiteral(value) => Type::Integer(value),
-                Value::StringLiteral(value) => Type::String(value),
-                Value::BoolLiteral(value) => Type::Bool(value),
+                Value::IntegerLiteral(value) => WrappedType::from(Type::Integer(value)),
+                Value::StringLiteral(value) => WrappedType::from(Type::String(value)),
+                Value::BoolLiteral(value) => WrappedType::from(Type::Bool(value)),
                 Value::Variable(name) => self.resolve_variable_by_name(name),
                 Value::Expression { values, operators } => {
                     // oh boy
-                    let mut accumulator: Type = self.resolve_argument_value(
+                    let mut accumulator: WrappedType = self.resolve_argument_value(
                         values.first().unwrap().clone()
                     );
                     let mut index = 0;
 
                     for operator in operators {
-                        accumulator = Interpreter::operate_on_types(
-                            accumulator.clone(),
-                            self.resolve_argument_value(values.get(index + 1).unwrap().clone()),
+                        let second_arg = self.resolve_argument_value(values.get(index + 1).unwrap().clone());
+
+                        accumulator = WrappedType::from(self.operate_on_types(
+                            accumulator,
+                            second_arg,
                             operator
-                        );
+                        ));
                         index += 1;
                     }
 
@@ -107,15 +124,15 @@ impl Interpreter {
                     let mut accumulator: Vec<Type> = vec![];
 
                     for value in values {
-                        accumulator.push(self.resolve_argument_value(value));
+                        accumulator.push(self.resolve_argument_value(value).value);
                     }
 
-                    Type::Array(accumulator)
+                    WrappedType::from(Type::Array(accumulator))
                 },
                 Value::Return => {
-                    self.return_value.to_owned().unwrap()
+                    WrappedType::from(self.return_value.to_owned().unwrap())
                 },
-                Value::Null => Type::Null,
+                Value::Null => WrappedType::from(Type::Null),
             }
         }
     }
@@ -128,10 +145,10 @@ impl Interpreter {
             self.memory_cells.truncate(invalid_scope_start + 1);
         }
     }
-    fn operate_on_types(first: Type, second: Type, operator: Operator) -> Type {
-        match &first {
+    fn operate_on_types(&mut self, first: WrappedType, second: WrappedType, operator: Operator) -> Type {
+        match &first.value {
             Type::Bool(first_val) => {
-                match &second {
+                match &second.value {
                     Type::Bool(second_val) => {
                         match operator {
                             // logical
@@ -145,12 +162,12 @@ impl Interpreter {
                         }
                     }
                     _ => {
-                        panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
+                        panic!("Invalid args for comparison statement: {:?} | {:?}", first.value, second.value);
                     }
                 }
             }
             Type::Integer(first_val) => {
-                match &second {
+                match &second.value {
                     Type::Integer(second_val) => {
                         match operator {
                             // math
@@ -175,12 +192,12 @@ impl Interpreter {
                         }
                     }
                     _ => {
-                        panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
+                        panic!("Invalid args for comparison statement: {:?} | {:?}", first.value, second.value);
                     }
                 }
             }
             Type::String(first_val) => {
-                match &second {
+                match &second.value {
                     Type::Integer(second_val) => {
                         match operator {
                             // math
@@ -217,20 +234,34 @@ impl Interpreter {
                     Type::Null => {
                         match operator {
                             Operator::LenAccess => { return Type::Integer(first_val.len() as u32); }
+                            Operator::PopAccess => {
+                                let ret_var = first_val.chars().last().unwrap().to_string().to_owned();
+                                self.memory_cells[first.addr.unwrap()] = Type::String(
+                                    first_val[..(first_val.len() - 1)].to_string()
+                                );
+                                return Type::String(ret_var);
+                            }
+                            Operator::PopFrontAccess => {
+                                let ret_var = first_val.chars().next().unwrap().to_string().to_owned();
+                                self.memory_cells[first.addr.unwrap()] = Type::String(
+                                    first_val[1..(first_val.len())].to_string()
+                                );
+                                return Type::String(ret_var);
+                            }
                             _ => unreachable!()
                         }
                     }
                     _ => {
-                        panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
+                        panic!("Invalid args for comparison statement: {:?} | {:?}", first.value, second.value);
                     }
                 }
             }
             Type::Array(first_val) => {
-                match &second {
+                match &second.value {
                     Type::Integer(second_val) => {
                         match operator {
                             // math
-                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second].to_owned()].concat()); }
+                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second.value].to_owned()].concat()); }
                             // index access
                             Operator::ArrayAccess => { return first_val[*second_val as usize].to_owned(); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
@@ -239,31 +270,45 @@ impl Interpreter {
                     Type::Bool(_) => {
                         match operator {
                             // math
-                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second].to_owned()].concat()); }
+                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second.value].to_owned()].concat()); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
                     Type::String(_) => {
                         match operator {
                             // math
-                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second].to_owned()].concat()); }
+                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second.value].to_owned()].concat()); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
                     Type::Null => {
                         match operator {
-                            // length access
+                            // access
                             Operator::LenAccess => { return Type::Integer(first_val.len() as u32); }
+                            Operator::PopAccess => {
+                                let ret_var = first_val.last().unwrap().to_owned();
+                                self.memory_cells[first.addr.unwrap()] = Type::Array(
+                                    first_val[..(first_val.len() - 1)].to_vec()
+                                );
+                                return ret_var;
+                            }
+                            Operator::PopFrontAccess => {
+                                let ret_var = first_val.first().unwrap().to_owned();
+                                self.memory_cells[first.addr.unwrap()] = Type::Array(
+                                    first_val[1..(first_val.len())].to_vec()
+                                );
+                                return ret_var;
+                            }
                             _ => unreachable!()
                         }
                     }
                     _ => {
-                        panic!("Invalid args for comparison statement: {:?} | {:?}", first, second);
+                        panic!("Invalid args for comparison statement: {:?} | {:?}", first.value, second.value);
                     }
                 }
             }
             _ => {
-                panic!("Invalid value passed for comparison initialization: {:?}", first);
+                panic!("Invalid value passed for comparison initialization: {:?}", first.value);
             }
         }
     }
@@ -357,7 +402,7 @@ impl Interpreter {
                 else_body_idx: _,
                 src_line: _,
             } => {
-                self.return_value = Some(self.resolve_argument_value(arg1.unwrap()));
+                self.return_value = Some(self.resolve_argument_value(arg1.unwrap()).value);
                 // invalidate base function scope at least
                 self.invalidate_current_scope();
     
@@ -390,9 +435,11 @@ impl Interpreter {
                 src_line,
             } => {
                 if let Some(Value::Variable(name)) = arg1 {
+                    let second_arg = self.resolve_argument_value(arg2.unwrap());
+
                     self.create_new_variable(
                         name.to_owned(),
-                        self.resolve_argument_value(arg2.unwrap())
+                        second_arg.value,
                     );
                 } else {
                     panic!("Malformed allocate on line {}!", src_line);
@@ -410,9 +457,11 @@ impl Interpreter {
                 src_line,
             } => {
                 if let Some(Value::Variable(name)) = arg1 {
+                    let second_arg = self.resolve_argument_value(arg2.unwrap());
+
                     self.set_or_create_new_variable(
                         name.to_owned(),
-                        self.resolve_argument_value(arg2.unwrap())
+                        second_arg.value,
                     );
                 } else {
                     panic!("Malformed set on line {}!", src_line);
@@ -429,7 +478,7 @@ impl Interpreter {
                 else_body_idx: _,
                 src_line: _,
             } => {
-                match self.resolve_argument_value(arg1.unwrap()) {
+                match self.resolve_argument_value(arg1.unwrap()).value {
                     Type::Integer(value) => print!("{}", value),
                     Type::String(value) => print!("{}", value.replace("\\n", "\n")), // jank shit
                     Type::Bool(value) => print!("{}", value),
@@ -459,10 +508,10 @@ impl Interpreter {
                 else_body_idx: _,
                 src_line: _,
             } => {
-                let first_arg: Type = self.resolve_argument_value(arg1.unwrap());
-                let second_arg: Type = self.resolve_argument_value(arg2.unwrap());
+                let first_arg: WrappedType = self.resolve_argument_value(arg1.unwrap());
+                let second_arg: WrappedType = self.resolve_argument_value(arg2.unwrap());
 
-                if Interpreter::operate_on_types(first_arg, second_arg, comparison_operator) == Type::Bool(true) {
+                if self.operate_on_types(first_arg, second_arg, comparison_operator) == Type::Bool(true) {
                     self.inst_ptr += 1;
                 } else {
                     // skip scope open and close at least
@@ -478,10 +527,10 @@ impl Interpreter {
                 else_body_idx: _,
                 src_line: _,
             } => {
-                let first_arg: Type = self.resolve_argument_value(arg1.unwrap());
-                let second_arg: Type = self.resolve_argument_value(arg2.unwrap());
+                let first_arg: WrappedType = self.resolve_argument_value(arg1.unwrap());
+                let second_arg: WrappedType = self.resolve_argument_value(arg2.unwrap());
 
-                if Interpreter::operate_on_types(first_arg, second_arg, comparison_operator) == Type::Bool(true) {
+                if self.operate_on_types(first_arg, second_arg, comparison_operator) == Type::Bool(true) {
                     self.inst_ptr += 1;
                 } else {
                     // skip scope open and close at least

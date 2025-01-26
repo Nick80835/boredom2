@@ -29,6 +29,8 @@ pub enum Operator {
     LessThanOrEquals,
     ArrayAccess,
     LenAccess,
+    PopAccess,
+    PopFrontAccess,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -334,6 +336,34 @@ impl ASTGenerator {
                                         Value::Null
                                     ],
                                     operators: vec![Operator::LenAccess],
+                                }
+                            );
+                        },
+                        Token::PopAccess => {
+                            // popping previous value token, coalesce
+                            let value = value_tokens.pop().unwrap();
+
+                            value_tokens.push(
+                                Value::Expression {
+                                    values: vec![
+                                        value,
+                                        Value::Null
+                                    ],
+                                    operators: vec![Operator::PopAccess],
+                                }
+                            );
+                        },
+                        Token::PopFrontAccess => {
+                            // popping previous value token, coalesce
+                            let value = value_tokens.pop().unwrap();
+
+                            value_tokens.push(
+                                Value::Expression {
+                                    values: vec![
+                                        value,
+                                        Value::Null
+                                    ],
+                                    operators: vec![Operator::PopFrontAccess],
                                 }
                             );
                         },

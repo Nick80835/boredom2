@@ -45,6 +45,8 @@ pub enum Token {
     Jump,
     Variable(String),
     LenAccess,
+    PopAccess,
+    PopFrontAccess,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -174,7 +176,7 @@ impl Tokenizer {
             if token_idx < 1 {
                 out_tokens.push(Tokenizer::unraw_token(token));
             } else {
-                match token.token {
+                match &token.token {
                     Token::Symbol('=') => {
                         match &tokens[token_idx - 1].token { // get and replace previous token
                             // comparison
@@ -214,6 +216,39 @@ impl Tokenizer {
                             Token::Symbol('-') => {
                                 out_tokens.truncate(out_tokens.len() - 1);
                                 out_tokens.push(WrappedToken::from(Token::SubroutineDirect));
+                            }
+                            _ => {
+                                out_tokens.push(Tokenizer::unraw_token(token));
+                            }
+                        }
+                    }
+                    Token::RawIdentifier(value) => {
+                        match value.as_str() {
+                            "pop" => {
+                                match &tokens[token_idx - 1].token { // get and replace previous token
+                                    Token::Symbol('.') => {
+                                        // pop
+                                        out_tokens.truncate(out_tokens.len() - 1);
+                                        out_tokens.push(WrappedToken::from(Token::PopAccess));
+                                    }
+                                    _ => {
+                                        // previous token was not '.' access, pop is a variable here
+                                        out_tokens.push(Tokenizer::unraw_token(token));
+                                    }
+                                }
+                            }
+                            "popfront" => {
+                                match &tokens[token_idx - 1].token { // get and replace previous token
+                                    Token::Symbol('.') => {
+                                        // pop
+                                        out_tokens.truncate(out_tokens.len() - 1);
+                                        out_tokens.push(WrappedToken::from(Token::PopFrontAccess));
+                                    }
+                                    _ => {
+                                        // previous token was not '.' access, pop is a variable here
+                                        out_tokens.push(Tokenizer::unraw_token(token));
+                                    }
+                                }
                             }
                             _ => {
                                 out_tokens.push(Tokenizer::unraw_token(token));

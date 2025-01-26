@@ -15,7 +15,11 @@ sub remove_arr_index {
     ret out_arr;
 }
 
-set arr_arg = [1 2 3];
+set arr_arg = [1, 1+1, 3];
+
 set idx_to_rem = 1;
 call remove_arr_index->arr_arg;
+print arr_arg;
+print [1, [1, 2], 3]|1||0|;
+print arr_arg.pop;
 print arr_arg;
