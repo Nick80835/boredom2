@@ -21,8 +21,8 @@ impl WrappedType {
     pub fn from(value: Type) -> Self {
         Self { value, addr: None }
     }
-    pub fn from_with_addr(value: Type, addr: usize) -> Self {
-        Self { value, addr: Some(addr) }
+    pub fn from_with_addr(value: Type, addr: Option<usize>) -> Self {
+        Self { value, addr: addr }
     }
 }
 
@@ -91,7 +91,7 @@ impl Interpreter {
         }
 
         let var = &self.memory_cells[*addr.unwrap()];
-        return WrappedType::from_with_addr(var.to_owned(), addr.unwrap().to_owned());
+        return WrappedType::from_with_addr(var.to_owned(), Some(addr.unwrap().to_owned()));
     }
     fn resolve_argument_value(&mut self, argument: Value) -> WrappedType {
         if let Value::Variable(name) = argument {
@@ -112,11 +112,11 @@ impl Interpreter {
                     for operator in operators {
                         let second_arg = self.resolve_argument_value(values.get(index + 1).unwrap().clone());
 
-                        accumulator = WrappedType::from(self.operate_on_types(
+                        accumulator = self.operate_on_types(
                             accumulator,
                             second_arg,
                             operator
-                        ));
+                        );
                         index += 1;
                     }
 
@@ -147,19 +147,19 @@ impl Interpreter {
             self.memory_cells.truncate(invalid_scope_start + 1);
         }
     }
-    fn operate_on_types(&mut self, first: WrappedType, second: WrappedType, operator: Operator) -> Type {
+    fn operate_on_types(&mut self, first: WrappedType, second: WrappedType, operator: Operator) -> WrappedType {
         match &first.value {
             Type::Bool(first_val) => {
                 match &second.value {
                     Type::Bool(second_val) => {
                         match operator {
                             // logical
-                            Operator::Equals => { return Type::Bool(first_val == second_val); }
-                            Operator::NotEquals => { return Type::Bool(first_val != second_val); }
-                            Operator::MoreThan => { return Type::Bool(first_val > second_val); }
-                            Operator::LessThan => { return Type::Bool(first_val < second_val); }
-                            Operator::MoreThanOrEquals => { return Type::Bool(first_val >= second_val); }
-                            Operator::LessThanOrEquals => { return Type::Bool(first_val <= second_val); }
+                            Operator::Equals => { return WrappedType::from(Type::Bool(first_val == second_val)); }
+                            Operator::NotEquals => { return WrappedType::from(Type::Bool(first_val != second_val)); }
+                            Operator::MoreThan => { return WrappedType::from(Type::Bool(first_val > second_val)); }
+                            Operator::LessThan => { return WrappedType::from(Type::Bool(first_val < second_val)); }
+                            Operator::MoreThanOrEquals => { return WrappedType::from(Type::Bool(first_val >= second_val)); }
+                            Operator::LessThanOrEquals => { return WrappedType::from(Type::Bool(first_val <= second_val)); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
@@ -173,23 +173,23 @@ impl Interpreter {
                     Type::Integer(second_val) => {
                         match operator {
                             // math
-                            Operator::Add => { return Type::Integer(first_val + second_val); }
-                            Operator::Sub => { return Type::Integer(first_val - second_val); }
+                            Operator::Add => { return WrappedType::from(Type::Integer(first_val + second_val)); }
+                            Operator::Sub => { return WrappedType::from(Type::Integer(first_val - second_val)); }
                             // logical
-                            Operator::Equals => { return Type::Bool(first_val == second_val); }
-                            Operator::NotEquals => { return Type::Bool(first_val != second_val); }
-                            Operator::MoreThan => { return Type::Bool(first_val > second_val); }
-                            Operator::LessThan => { return Type::Bool(first_val < second_val); }
-                            Operator::MoreThanOrEquals => { return Type::Bool(first_val >= second_val); }
-                            Operator::LessThanOrEquals => { return Type::Bool(first_val <= second_val); }
+                            Operator::Equals => { return WrappedType::from(Type::Bool(first_val == second_val)); }
+                            Operator::NotEquals => { return WrappedType::from(Type::Bool(first_val != second_val)); }
+                            Operator::MoreThan => { return WrappedType::from(Type::Bool(first_val > second_val)); }
+                            Operator::LessThan => { return WrappedType::from(Type::Bool(first_val < second_val)); }
+                            Operator::MoreThanOrEquals => { return WrappedType::from(Type::Bool(first_val >= second_val)); }
+                            Operator::LessThanOrEquals => { return WrappedType::from(Type::Bool(first_val <= second_val)); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
                     Type::Bool(second_val) => {
                         match operator {
                             // logical
-                            Operator::Equals => { return Type::Bool((*first_val == 0) != *second_val); }
-                            Operator::NotEquals => { return Type::Bool((*first_val != 0) != *second_val); }
+                            Operator::Equals => { return WrappedType::from(Type::Bool((*first_val == 0) != *second_val)); }
+                            Operator::NotEquals => { return WrappedType::from(Type::Bool((*first_val != 0) != *second_val)); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
@@ -203,52 +203,58 @@ impl Interpreter {
                     Type::Integer(second_val) => {
                         match operator {
                             // math
-                            Operator::Add => { return Type::String(first_val.to_string() + &second_val.to_string()); }
+                            Operator::Add => { return WrappedType::from(Type::String(first_val.to_string() + &second_val.to_string())); }
                             // index access
-                            Operator::ArrayAccess => { return Type::String(first_val.chars().nth(*second_val as usize).unwrap().to_string().to_owned()); }
+                            Operator::ArrayAccess => {
+                                return WrappedType::from_with_addr(
+                                    Type::String(first_val.chars().nth(*second_val as usize).unwrap().to_string().to_owned()),
+                                    first.addr,
+                                );
+                            }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
                     Type::Bool(second_val) => {
                         match operator {
                             // math
-                            Operator::Add => { return Type::String(first_val.to_string() + &second_val.to_string()); }
+                            Operator::Add => { return WrappedType::from(Type::String(first_val.to_string() + &second_val.to_string())); }
                             // logical
-                            Operator::Equals => { return Type::Bool((first_val.len() == 0) != *second_val); }
-                            Operator::NotEquals => { return Type::Bool((first_val.len() != 0) != *second_val); }
+                            Operator::Equals => { return WrappedType::from(Type::Bool((first_val.len() == 0) != *second_val)); }
+                            Operator::NotEquals => { return WrappedType::from(Type::Bool((first_val.len() != 0) != *second_val)); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
                     Type::String(second_val) => {
                         match operator {
                             // math
-                            Operator::Add => { return Type::String(first_val.to_string() + second_val); }
+                            Operator::Add => { return WrappedType::from(Type::String(first_val.to_string() + second_val)); }
                             // logical
-                            Operator::Equals => { return Type::Bool(first_val == second_val); }
-                            Operator::NotEquals => { return Type::Bool(first_val != second_val); }
-                            Operator::MoreThan => { return Type::Bool(first_val.len() > second_val.len()); }
-                            Operator::LessThan => { return Type::Bool(first_val.len() < second_val.len()); }
-                            Operator::MoreThanOrEquals => { return Type::Bool(first_val.len() >= second_val.len()); }
-                            Operator::LessThanOrEquals => { return Type::Bool(first_val.len() <= second_val.len()); }
+                            Operator::Equals => { return WrappedType::from(Type::Bool(first_val == second_val)); }
+                            Operator::NotEquals => { return WrappedType::from(Type::Bool(first_val != second_val)); }
+                            Operator::MoreThan => { return WrappedType::from(Type::Bool(first_val.len() > second_val.len())); }
+                            Operator::LessThan => { return WrappedType::from(Type::Bool(first_val.len() < second_val.len())); }
+                            Operator::MoreThanOrEquals => { return WrappedType::from(Type::Bool(first_val.len() >= second_val.len())); }
+                            Operator::LessThanOrEquals => { return WrappedType::from(Type::Bool(first_val.len() <= second_val.len())); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
                     Type::Null => {
                         match operator {
-                            Operator::LenAccess => { return Type::Integer(first_val.len() as u32); }
+                            Operator::LenAccess => { return WrappedType::from(Type::Integer(first_val.len() as u32)); }
                             Operator::PopAccess => {
+                                // first val is the String
                                 let ret_var = first_val.chars().last().unwrap().to_string().to_owned();
                                 self.memory_cells[first.addr.unwrap()] = Type::String(
                                     first_val[..(first_val.len() - 1)].to_string()
                                 );
-                                return Type::String(ret_var);
+                                return WrappedType::from_with_addr(Type::String(ret_var), first.addr);
                             }
                             Operator::PopFrontAccess => {
                                 let ret_var = first_val.chars().next().unwrap().to_string().to_owned();
                                 self.memory_cells[first.addr.unwrap()] = Type::String(
                                     first_val[1..(first_val.len())].to_string()
                                 );
-                                return Type::String(ret_var);
+                                return WrappedType::from_with_addr(Type::String(ret_var), first.addr);
                             }
                             _ => unreachable!()
                         }
@@ -263,43 +269,49 @@ impl Interpreter {
                     Type::Integer(second_val) => {
                         match operator {
                             // math
-                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second.value].to_owned()].concat()); }
+                            Operator::Add => { return WrappedType::from(Type::Array([first_val.to_owned(), vec![second.value].to_owned()].concat())); }
                             // index access
-                            Operator::ArrayAccess => { return first_val[*second_val as usize].to_owned(); }
+                            Operator::ArrayAccess => {
+                                return WrappedType::from_with_addr(
+                                    first_val[*second_val as usize].to_owned(),
+                                    first.addr,
+                                );
+                            }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
                     Type::Bool(_) => {
                         match operator {
                             // math
-                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second.value].to_owned()].concat()); }
+                            Operator::Add => { return WrappedType::from(Type::Array([first_val.to_owned(), vec![second.value].to_owned()].concat())); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
                     Type::String(_) => {
                         match operator {
                             // math
-                            Operator::Add => { return Type::Array([first_val.to_owned(), vec![second.value].to_owned()].concat()); }
+                            Operator::Add => { return WrappedType::from(Type::Array([first_val.to_owned(), vec![second.value].to_owned()].concat())); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
                     Type::Null => {
                         match operator {
                             // access
-                            Operator::LenAccess => { return Type::Integer(first_val.len() as u32); }
+                            Operator::LenAccess => { return WrappedType::from(Type::Integer(first_val.len() as u32)); }
                             Operator::PopAccess => {
+                                // first val is the Array
                                 let ret_var = first_val.last().unwrap().to_owned();
                                 self.memory_cells[first.addr.unwrap()] = Type::Array(
                                     first_val[..(first_val.len() - 1)].to_vec()
                                 );
-                                return ret_var;
+                                return WrappedType::from_with_addr(ret_var, first.addr);
                             }
                             Operator::PopFrontAccess => {
                                 let ret_var = first_val.first().unwrap().to_owned();
                                 self.memory_cells[first.addr.unwrap()] = Type::Array(
                                     first_val[1..(first_val.len())].to_vec()
                                 );
-                                return ret_var;
+                                return WrappedType::from_with_addr(ret_var, first.addr);
                             }
                             _ => unreachable!()
                         }
@@ -491,7 +503,7 @@ impl Interpreter {
                 let first_arg: WrappedType = self.resolve_argument_value(arg1.unwrap());
                 let second_arg: WrappedType = self.resolve_argument_value(arg2.unwrap());
 
-                if self.operate_on_types(first_arg, second_arg, comparison_operator) == Type::Bool(true) {
+                if self.operate_on_types(first_arg, second_arg, comparison_operator).value == Type::Bool(true) {
                     self.else_flag = false;
                     self.inst_ptr += 1;
                 } else {
@@ -528,7 +540,7 @@ impl Interpreter {
                 let first_arg: WrappedType = self.resolve_argument_value(arg1.unwrap());
                 let second_arg: WrappedType = self.resolve_argument_value(arg2.unwrap());
 
-                if self.operate_on_types(first_arg, second_arg, comparison_operator) == Type::Bool(true) {
+                if self.operate_on_types(first_arg, second_arg, comparison_operator).value == Type::Bool(true) {
                     self.inst_ptr += 1;
                 } else {
                     // skip scope open and close at least
