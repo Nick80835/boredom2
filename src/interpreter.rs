@@ -34,6 +34,7 @@ pub struct Interpreter {
     variable_map: HashMap<String, usize>,
     mem_scope_start_stack: Vec<usize>,
     loop_stack: Vec<usize>,
+    else_flag: bool,
     // return address, scopes deep
     return_stack: Vec<(usize, usize)>,
     return_value: Option<Type>,
@@ -49,6 +50,7 @@ impl Interpreter {
             variable_map: HashMap::new(),
             mem_scope_start_stack: vec![0],
             loop_stack: vec![],
+            else_flag: false,
             return_stack: vec![],
             return_value: None,
         }
@@ -323,7 +325,6 @@ impl Interpreter {
                 arg2: _,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line: _,
             } => {
                 self.halted = true;
@@ -334,7 +335,6 @@ impl Interpreter {
                 arg2: _,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line: _,
             } => {
                 self.mem_scope_start_stack.push(self.memory_cells.len());
@@ -351,7 +351,6 @@ impl Interpreter {
                 arg2: _,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line: _,
             } => {
                 let loop_idx = self.loop_stack.pop().unwrap() - 1;
@@ -370,7 +369,6 @@ impl Interpreter {
                         arg2: _,
                         body_idx: _,
                         body_extent: _,
-                        else_body_idx: _,
                         src_line: _,
                     } = previous_token {
                         self.inst_ptr = loop_idx;
@@ -385,7 +383,6 @@ impl Interpreter {
                 arg2: _,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line: _,
             } => {
                 self.mem_scope_start_stack.push(self.memory_cells.len());
@@ -399,7 +396,6 @@ impl Interpreter {
                 arg2: _,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line: _,
             } => {
                 self.return_value = Some(self.resolve_argument_value(arg1.unwrap()).value);
@@ -419,7 +415,6 @@ impl Interpreter {
                 arg2: _,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line: _,
             } => {
                 // skip over subroutine when not called
@@ -431,7 +426,6 @@ impl Interpreter {
                 arg2,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line,
             } => {
                 if let Some(Value::Variable(name)) = arg1 {
@@ -453,7 +447,6 @@ impl Interpreter {
                 arg2,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line,
             } => {
                 if let Some(Value::Variable(name)) = arg1 {
@@ -475,7 +468,6 @@ impl Interpreter {
                 arg2: _,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line: _,
             } => {
                 match self.resolve_argument_value(arg1.unwrap()).value {
@@ -494,13 +486,31 @@ impl Interpreter {
                 arg2,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line: _,
             } => {
                 let first_arg: WrappedType = self.resolve_argument_value(arg1.unwrap());
                 let second_arg: WrappedType = self.resolve_argument_value(arg2.unwrap());
 
                 if self.operate_on_types(first_arg, second_arg, comparison_operator) == Type::Bool(true) {
+                    self.else_flag = false;
+                    self.inst_ptr += 1;
+                } else {
+                    // allow else
+                    self.else_flag = true;
+                    // skip scope open and close at least
+                    self.inst_ptr += self.peek_next_inst().body_extent.unwrap() + 2;
+                }
+            }
+            ASTToken {
+                t_type: Statement::Else,
+                arg1: _,
+                arg2: _,
+                body_idx: _,
+                body_extent: _,
+                src_line: _,
+            } => {
+                if self.else_flag {
+                    self.else_flag = false;
                     self.inst_ptr += 1;
                 } else {
                     // skip scope open and close at least
@@ -513,7 +523,6 @@ impl Interpreter {
                 arg2,
                 body_idx: _,
                 body_extent: _,
-                else_body_idx: _,
                 src_line: _,
             } => {
                 let first_arg: WrappedType = self.resolve_argument_value(arg1.unwrap());

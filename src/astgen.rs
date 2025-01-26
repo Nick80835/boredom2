@@ -45,6 +45,7 @@ pub enum Statement {
     EOF,
     // conditions
     If(Operator),
+    Else,
     While(Operator),
     // subroutines
     SubroutineCall(Option<usize>),
@@ -61,34 +62,38 @@ pub struct ASTToken {
     // args for nested code blocks (if/else)
     pub body_idx: Option<usize>,
     pub body_extent: Option<usize>,
-    pub else_body_idx: Option<usize>,
     pub src_line: usize,
 }
 
 impl ASTToken {
     pub fn empty(src_line: usize) -> Self {
         Self {
-            t_type: Statement::Empty, arg1: None, arg2: None, body_idx: None, body_extent: None, else_body_idx: None, src_line
+            t_type: Statement::Empty, arg1: None, arg2: None, body_idx: None, body_extent: None, src_line
         }
     }
     pub fn of_type(t_type: Statement, src_line: usize) -> Self {
         Self {
-            t_type, arg1: None, arg2: None, body_idx: None, body_extent: None, else_body_idx: None, src_line
+            t_type, arg1: None, arg2: None, body_idx: None, body_extent: None, src_line
         }
     }
     pub fn with_args(t_type: Statement, arg1: Value, arg2: Option<Value>, src_line: usize) -> Self {
         Self {
-            t_type, arg1: Some(arg1), arg2: arg2, body_idx: None, body_extent: None, else_body_idx: None, src_line
+            t_type, arg1: Some(arg1), arg2: arg2, body_idx: None, body_extent: None, src_line
         }
     }
-    pub fn with_args_and_body(t_type: Statement, arg1: Value, arg2: Option<Value>, body_idx: usize, else_body_idx: Option<usize>, src_line: usize) -> Self {
+    pub fn with_body(t_type: Statement, body_idx: usize, src_line: usize) -> Self {
         Self {
-            t_type, arg1: Some(arg1), arg2: arg2, body_idx: Some(body_idx), body_extent: None, else_body_idx, src_line
+            t_type, arg1: None, arg2: None, body_idx: Some(body_idx), body_extent: None, src_line
+        }
+    }
+    pub fn with_args_and_body(t_type: Statement, arg1: Value, arg2: Option<Value>, body_idx: usize, src_line: usize) -> Self {
+        Self {
+            t_type, arg1: Some(arg1), arg2: arg2, body_idx: Some(body_idx), body_extent: None, src_line
         }
     }
     pub fn new_scope(body_idx: usize, src_line: usize) -> Self {
         Self {
-            t_type: Statement::Block, arg1: None, arg2: None, body_idx: Some(body_idx), body_extent: None, else_body_idx: None, src_line
+            t_type: Statement::Block, arg1: None, arg2: None, body_idx: Some(body_idx), body_extent: None, src_line
         }
     }
 }
@@ -613,7 +618,6 @@ impl ASTGenerator {
                             values[0].to_owned(),
                             Some(Value::BoolLiteral(true)),
                             self.generated_ast.len() + 1,
-                            None,
                             current_token.src_line,
                         );
                     } else {
@@ -622,10 +626,23 @@ impl ASTGenerator {
                             values[0].to_owned(),
                             Some(values[1].to_owned()),
                             self.generated_ast.len() + 1,
-                            None,
                             current_token.src_line,
                         );
                     }
+
+                    // add new token to stack
+                    self.insert_ast_token_at_end(new_token);
+                    // check for block to execute after if statement
+                    assert_eq!(self.peek_next_token().unwrap().token, Token::ScopeOpen);
+                    self.insert_new_empty_ast_scope(current_token.src_line);
+                    self.advance_token(); // skip scope open
+                }
+                Token::Else => {
+                    let new_token = ASTToken::with_body(
+                        Statement::Else,
+                        self.generated_ast.len() + 1,
+                        current_token.src_line,
+                    );
 
                     // add new token to stack
                     self.insert_ast_token_at_end(new_token);
@@ -646,7 +663,6 @@ impl ASTGenerator {
                             values[0].to_owned(),
                             Some(Value::BoolLiteral(true)),
                             self.generated_ast.len() + 1,
-                            None,
                             current_token.src_line,
                         );
                     } else {
@@ -655,7 +671,6 @@ impl ASTGenerator {
                             values[0].to_owned(),
                             Some(values[1].to_owned()),
                             self.generated_ast.len() + 1,
-                            None,
                             current_token.src_line,
                         );
                     }
