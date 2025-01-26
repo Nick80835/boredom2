@@ -429,7 +429,7 @@ impl Interpreter {
                 self.return_value = Some(self.resolve_argument_value(arg1.unwrap()).value);
                 // invalidate base function scope at least
                 self.invalidate_current_scope();
-    
+
                 for _ in 0..self.return_stack.last().unwrap().1 {
                     // invalidate for every scope remaining in function
                     self.invalidate_current_scope();

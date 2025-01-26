@@ -191,15 +191,15 @@ impl ASTGenerator {
             let mut token_idx = 0;
             let mut value_tokens: Vec<Value> = vec![];
             let mut operator_tokens: Vec<Operator> = vec![];
-    
+
             while token_idx < tokens.len() {
                 if tokens[token_idx].token == Token::ArrayOpen {
                     // handle array
                     token_idx += 1;
-    
+
                     while tokens[token_idx].token != Token::ArrayClose {
                         let this_token = tokens[token_idx].to_owned();
-    
+
                         if ASTGenerator::token_is_assign_like(&this_token)
                         || ASTGenerator::token_is_assign_op_like(&this_token)
                         || ASTGenerator::token_is_comparison_like(&this_token)
@@ -215,18 +215,18 @@ impl ASTGenerator {
                                 let mut parens_deep: usize = 0;
                                 // skip opening parens
                                 token_idx += 1;
-    
+
                                 while tokens[token_idx].token != Token::ParensClose || parens_deep > 0 {
                                     if tokens[token_idx].token == Token::ParensOpen {
                                         parens_deep += 1;
                                     } else if tokens[token_idx].token == Token::ParensClose {
                                         parens_deep -= 1;
                                     }
-    
+
                                     parens_tokens.push(tokens[token_idx].to_owned());
                                     token_idx += 1;
                                 }
-    
+
                                 array_scratch.last_mut().unwrap().extend(parens_tokens);
                             }
                             Token::ArrayOpen => {
@@ -237,18 +237,18 @@ impl ASTGenerator {
                                 token_idx += 1;
                                 // this is needed for resolve_any_value to not have a hissy fit
                                 arr_tokens.push(WrappedToken::from(Token::ArrayOpen));
-    
+
                                 while tokens[token_idx].token != Token::ArrayClose || arrs_deep > 0 {
                                     if tokens[token_idx].token == Token::ArrayOpen {
                                         arrs_deep += 1;
                                     } else if tokens[token_idx].token == Token::ArrayClose {
                                         arrs_deep -= 1;
                                     }
-    
+
                                     arr_tokens.push(tokens[token_idx].to_owned());
                                     token_idx += 1;
                                 }
-    
+
                                 // this is also needed for resolve_any_value to not have a hissy fit
                                 arr_tokens.push(WrappedToken::from(Token::ArrayClose));
                                 array_scratch.last_mut().unwrap().extend(arr_tokens);
@@ -261,7 +261,7 @@ impl ASTGenerator {
                                 array_scratch.last_mut().unwrap().push(this_token);
                             }
                         }
-    
+
                         token_idx += 1;
                     }
 
@@ -280,7 +280,7 @@ impl ASTGenerator {
                     operator_tokens.push(ASTGenerator::resolve_comparison_like_token(&tokens[token_idx]));
                 } else {
                     let this_token = tokens[token_idx].to_owned();
-    
+
                     match &this_token.token {
                         // values
                         Token::IntegerLiteral(_) => value_tokens.push(ASTGenerator::resolve_value_from_token(&this_token)),
@@ -378,7 +378,7 @@ impl ASTGenerator {
                         _ => panic!("LINE {} | {:?} passed as value for variable read token!", this_token.src_line, this_token),
                     }
                 }
-    
+
                 token_idx += 1;
             }
 
