@@ -239,6 +239,30 @@ impl ASTGenerator {
     
                                 array_scratch.last_mut().unwrap().extend(parens_tokens);
                             }
+                            Token::ArrayOpen => {
+                                // coalesce tokens in []
+                                let mut arr_tokens: Vec<WrappedToken> = vec![];
+                                let mut arrs_deep: usize = 0;
+                                // skip opening bracket
+                                token_idx += 1;
+                                // this is needed for resolve_any_value to not have a hissy fit
+                                arr_tokens.push(WrappedToken::from(Token::ArrayOpen));
+    
+                                while tokens[token_idx].token != Token::ArrayClose || arrs_deep > 0 {
+                                    if tokens[token_idx].token == Token::ArrayOpen {
+                                        arrs_deep += 1;
+                                    } else if tokens[token_idx].token == Token::ArrayClose {
+                                        arrs_deep -= 1;
+                                    }
+    
+                                    arr_tokens.push(tokens[token_idx].to_owned());
+                                    token_idx += 1;
+                                }
+    
+                                // this is also needed for resolve_any_value to not have a hissy fit
+                                arr_tokens.push(WrappedToken::from(Token::ArrayClose));
+                                array_scratch.last_mut().unwrap().extend(arr_tokens);
+                            }
                             Token::Comma => {
                                 // make new token vector
                                 array_scratch.push(vec![]);
