@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::astgen::{ASTToken, Operator, Statement, Value};
 
 #[derive(Debug, Clone, PartialEq)]
-enum Type {
+pub enum Type {
     Integer(u32),
     String(String),
     Bool(bool),
