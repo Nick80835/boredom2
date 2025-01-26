@@ -62,8 +62,8 @@ impl Interpreter {
     fn get_inst(&self, idx: usize) -> &ASTToken {
         self.ast_tokens.get(idx).unwrap()
     }
-    pub fn print_state(&self) {
-        println!("STATE\n{} | {:?}\n{:?}\n{:?}", self.inst_ptr, self.current_inst(), self.memory_cells, self.variable_map);
+    pub fn get_memory(&self) -> &Vec<Type> {
+        return &self.memory_cells;
     }
     fn create_new_variable(&mut self, name: String, value: Type) {
         if self.variable_map.get(&name) != None {

@@ -58,6 +58,7 @@ fn main() {
     let mut interpreter = Interpreter::init(astgen.generated_ast.clone());
 
     while !interpreter.halted {
+        //println!("{:?}", interpreter.get_memory());
         //interpreter.print_state();
         interpreter.execute_one();
     }
