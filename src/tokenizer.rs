@@ -41,8 +41,6 @@ pub enum Token {
     Print,
     ReadLine,
     LineEnd,
-    Label,
-    Jump,
     Variable(String),
     LenAccess,
     PopAccess,
@@ -77,7 +75,7 @@ impl Tokenizer {
     fn get_current_line(&self) -> &String { &self.lines[self.line_idx] }
     fn get_current_char(&self) -> char { self.get_current_line().chars().collect::<Vec<char>>()[self.char_idx] }
     fn special_symbols() -> Vec<char> {
-        vec!['!', '?', '=', '{', '}', '>', '<', ';', '+', '-', ':', '[', ']', '|', '(', ')', '.', ',']
+        vec!['!', '?', '=', '{', '}', '>', '<', ';', '+', '-', '[', ']', '|', '(', ')', '.', ',']
     }
 
     pub fn next_token(&mut self) -> WrappedToken {
@@ -129,7 +127,6 @@ impl Tokenizer {
                     "readln" => WrappedToken::from_with_line(Token::ReadLine, token.src_line),
                     "true" => WrappedToken::from_with_line(Token::BoolTrue, token.src_line),
                     "false" => WrappedToken::from_with_line(Token::BoolFalse, token.src_line),
-                    "jump" => WrappedToken::from_with_line(Token::Jump, token.src_line),
                     "call" => WrappedToken::from_with_line(Token::SubroutineCall, token.src_line),
                     "ret" => WrappedToken::from_with_line(Token::SubroutineReturn, token.src_line),
                     "sub" => WrappedToken::from_with_line(Token::SubroutineDefine, token.src_line),
@@ -146,7 +143,6 @@ impl Tokenizer {
                     ';' => WrappedToken::from_with_line(Token::LineEnd, token.src_line),
                     '+' => WrappedToken::from_with_line(Token::Plus, token.src_line),
                     '-' => WrappedToken::from_with_line(Token::Minus, token.src_line),
-                    ':' => WrappedToken::from_with_line(Token::Label, token.src_line),
                     '[' => WrappedToken::from_with_line(Token::ArrayOpen, token.src_line),
                     ']' => WrappedToken::from_with_line(Token::ArrayClose, token.src_line),
                     '|' => WrappedToken::from_with_line(Token::ArrayAccess, token.src_line),

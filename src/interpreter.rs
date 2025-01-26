@@ -489,17 +489,6 @@ impl Interpreter {
                 self.inst_ptr += 1;
             }
             ASTToken {
-                t_type: Statement::Jump(jump_idx),
-                arg1: _,
-                arg2: _,
-                body_idx: _,
-                body_extent: _,
-                else_body_idx: _,
-                src_line: _,
-            } => {
-                self.inst_ptr = jump_idx.unwrap();
-            }
-            ASTToken {
                 t_type: Statement::If(comparison_operator),
                 arg1,
                 arg2,

@@ -46,9 +46,6 @@ pub enum Statement {
     // conditions
     If(Operator),
     While(Operator),
-    // jumps
-    Jump(Option<usize>),
-    Label(String),
     // subroutines
     SubroutineCall(Option<usize>),
     SubroutineReturn,
@@ -101,10 +98,6 @@ pub struct ASTGenerator {
     current_token_idx: usize,
     pub generated_ast: Vec<ASTToken>,
     scope_open_idxs: Vec<usize>,
-    // label name, label index
-    jump_table: HashMap<String, usize>,
-    // label name to jump to, vec of indexes of orphaned jump
-    jumps: HashMap<String, Vec<usize>>,
     // subroutine name, subroutine index
     subroutine_table: HashMap<String, usize>,
     // subroutine name to call, vec of indexes of calls
@@ -118,8 +111,6 @@ impl ASTGenerator {
             current_token_idx: 0,
             generated_ast: vec![],
             scope_open_idxs: vec![],
-            jump_table: HashMap::new(),
-            jumps: HashMap::new(),
             subroutine_table: HashMap::new(),
             subroutine_calls: HashMap::new(),
         }
@@ -472,26 +463,6 @@ impl ASTGenerator {
     fn insert_ast_token_at_end(&mut self, new_token: ASTToken) {
         self.generated_ast.push(new_token);
     }
-    fn insert_label(&mut self, label_name: String) {
-        self.insert_ast_token_at_end(ASTToken::of_type(
-            Statement::Label(label_name.to_owned()),
-            0,
-        ));
-        self.jump_table.insert(label_name.to_owned(), self.generated_ast.len() - 1);
-    }
-    fn insert_dummy_jump(&mut self, jump_name: String, src_line: usize) {
-        self.insert_ast_token_at_end(ASTToken::of_type(
-            Statement::Jump(None),
-            src_line,
-        ));
-        self.jumps.entry(
-            jump_name
-        ).or_insert_with(
-            Vec::new
-        ).push(
-            self.generated_ast.len() - 1
-        );
-    }
     fn insert_subroutine(&mut self, subroutine_name: String) {
         self.insert_ast_token_at_end(ASTToken::of_type(
             Statement::SubroutineDefine,
@@ -546,27 +517,6 @@ impl ASTGenerator {
                 Token::EOF => {
                     self.scope_open_idxs.pop();
                     self.insert_ast_token_at_end(ASTToken::of_type(Statement::EOF, 0));
-                }
-                Token::Label => {
-                    // create new label with name
-                    let label_name = ASTGenerator::resolve_variable_name_like_token(
-                        self.advance_and_get_token()
-                    ).expect(&format!("LINE {} | Label name not passed to label!", current_token.src_line));
-
-                    self.insert_label(label_name);
-                    // check for line end
-                    assert_eq!(self.peek_next_token().unwrap().token, Token::LineEnd);
-                }
-                Token::Jump => {
-                    eprintln!("LINE {} | {}Warning: JUMPING IS UNSAFE!{}", current_token.src_line, "\x1b[38;5;214m", "\x1b[0m");
-                    // create new jump
-                    let label_name = ASTGenerator::resolve_variable_name_like_token(
-                        self.advance_and_get_token()
-                    ).expect(&format!("LINE {} | Label name not passed to jump!", current_token.src_line));
-
-                    self.insert_dummy_jump(label_name, current_token.src_line);
-                    // check for line end
-                    assert_eq!(self.peek_next_token().unwrap().token, Token::LineEnd);
                 }
                 Token::SubroutineCall => {
                     let subroutine_name = ASTGenerator::resolve_variable_name_like_token(
@@ -876,19 +826,6 @@ impl ASTGenerator {
 
             self.advance_token();
         }
-
-        // resolve jumps
-        for (key, value) in &self.jumps {
-            for jump_idx in value {
-                self.generated_ast[*jump_idx] = ASTToken::of_type(
-                    Statement::Jump(
-                        Some(*self.jump_table.get(key).unwrap())
-                    ),
-                    0,
-                )
-            }
-        }
-        self.jumps.clear();
 
         // resolve subroutines
         for (key, value) in &self.subroutine_calls {
