@@ -148,27 +148,19 @@ impl ASTGenerator {
             Token::BoolTrue => Value::BoolLiteral(true),
             Token::BoolFalse => Value::BoolLiteral(false),
             Token::Variable(value) => Value::Variable(value.to_owned()),
-            _ => panic!("{:?} passed as value for variable read token!", token),
+            _ => panic!("LINE {} | {:?} passed as value for value-like token!", token.src_line, token),
         }
     }
     fn resolve_variable_write_like_token(token: &WrappedToken) -> Value {
         match &token.token {
-            Token::Variable(value) => {
-                Value::Variable(value.to_owned())
-            }
-            _ => {
-                panic!("{:?} passed as value for variable write token!", token)
-            }
+            Token::Variable(value) => Value::Variable(value.to_owned()),
+            _ => panic!("LINE {} | {:?} passed as value for variable write-like token!", token.src_line, token),
         }
     }
     fn resolve_variable_name_like_token(token: &WrappedToken) -> Option<String> {
         match &token.token {
-            Token::Variable(value) => {
-                Some(value.to_owned())
-            }
-            _ => {
-                panic!("{:?} passed as value for variable write token!", token)
-            }
+            Token::Variable(value) => Some(value.to_owned()),
+            _ => panic!("LINE {} | {:?} passed as value for variable name-like token!", token.src_line, token),
         }
     }
     fn resolve_comparison_like_token(token: &WrappedToken) -> Operator {
@@ -179,7 +171,7 @@ impl ASTGenerator {
             Token::LessThan => Operator::LessThan,
             Token::MoreThanOrEquals => Operator::MoreThanOrEquals,
             Token::LessThanOrEquals => Operator::LessThanOrEquals,
-            _ => panic!("{:?} passed as value for comparison-like token!", token),
+            _ => panic!("LINE {} | {:?} passed as value for comparison-like token!", token.src_line, token),
         }
     }
     fn advance_and_gather_tokens_for_value(&mut self) -> Vec<WrappedToken> {
@@ -217,7 +209,7 @@ impl ASTGenerator {
                         || ASTGenerator::token_is_comparison_like(&this_token)
                         || ASTGenerator::token_is_line_end(&this_token)
                         || ASTGenerator::token_is_scope_like(&this_token) {
-                            panic!("Array incomplete!");
+                            panic!("LINE {} | Array incomplete!", this_token.src_line);
                         }
 
                         match tokens[token_idx].token {
@@ -387,11 +379,19 @@ impl ASTGenerator {
 
                             value_tokens.push(ASTGenerator::resolve_any_value(parens_tokens));
                         }
-                        _ => panic!("{:?} passed as value for variable read token!", this_token),
+                        _ => panic!("LINE {} | {:?} passed as value for variable read token!", this_token.src_line, this_token),
                     }
                 }
     
                 token_idx += 1;
+            }
+
+            if value_tokens.len() - 1 != operator_tokens.len() {
+                panic!(
+                    "LINE {} | Invalid token length of {} passed to resolve_any_value!",
+                    tokens.first().unwrap().src_line,
+                    tokens.len(),
+                );
             }
 
             return Value::Expression {
@@ -399,7 +399,15 @@ impl ASTGenerator {
                 operators: operator_tokens
             };
         } else {
-            panic!("Invalid operand length!");
+            if tokens.len() == 0 {
+                panic!("No tokens passed to resolve_any_value!");
+            }
+
+            panic!(
+                "LINE {} | Invalid token length of {} passed to resolve_any_value!",
+                tokens.first().unwrap().src_line,
+                tokens.len(),
+            );
         }
     }
     fn unpack_expression(expression: &Value) -> (Vec<Value>, Vec<Operator>) {
@@ -543,18 +551,18 @@ impl ASTGenerator {
                     // create new label with name
                     let label_name = ASTGenerator::resolve_variable_name_like_token(
                         self.advance_and_get_token()
-                    ).expect(&format!("Label name not passed to label on line {}!", current_token.src_line));
+                    ).expect(&format!("LINE {} | Label name not passed to label!", current_token.src_line));
 
                     self.insert_label(label_name);
                     // check for line end
                     assert_eq!(self.peek_next_token().unwrap().token, Token::LineEnd);
                 }
                 Token::Jump => {
-                    eprintln!("{}Warning: JUMPING IS UNSAFE!{}", "\x1b[38;5;214m", "\x1b[0m");
+                    eprintln!("LINE {} | {}Warning: JUMPING IS UNSAFE!{}", current_token.src_line, "\x1b[38;5;214m", "\x1b[0m");
                     // create new jump
                     let label_name = ASTGenerator::resolve_variable_name_like_token(
                         self.advance_and_get_token()
-                    ).expect(&format!("Label name not passed to jump on line {}!", current_token.src_line));
+                    ).expect(&format!("LINE {} | Label name not passed to jump!", current_token.src_line));
 
                     self.insert_dummy_jump(label_name, current_token.src_line);
                     // check for line end
@@ -575,7 +583,7 @@ impl ASTGenerator {
                     } else {
                         // check for -> and variable name to assign return to
                         if self.advance_and_get_token().token != Token::SubroutineDirect {
-                            panic!("{:?} passed as redirect to SubroutineCall on line {}!", current_token, current_token.src_line);
+                            panic!("LINE {} | {:?} passed as redirect to SubroutineCall!", current_token.src_line, current_token.token);
                         }
                         self.insert_subroutine_call(
                             subroutine_name, current_token.src_line
@@ -717,7 +725,7 @@ impl ASTGenerator {
 
                     // make sure the = is there
                     if !ASTGenerator::token_is_assign_like(self.advance_and_get_token()) {
-                        panic!("{:?} passed as Assign to Alloc on line {}!", current_token, current_token.src_line);
+                        panic!("LINE {} | {:?} passed as value to alloc!", current_token.src_line, current_token.token);
                     }
 
                     let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
@@ -752,7 +760,7 @@ impl ASTGenerator {
 
                     // make sure the = is there
                     if !ASTGenerator::token_is_assign_like(self.advance_and_get_token()) {
-                        panic!("{:?} passed as Assign to Set on line {}!", current_token, current_token.src_line);
+                        panic!("LINE {} | {:?} passed as value to set!", current_token.src_line, current_token.token);
                     }
 
                     let value_token = ASTGenerator::resolve_any_value(self.advance_and_gather_tokens_for_value());
@@ -815,7 +823,7 @@ impl ASTGenerator {
                             current_token.src_line,
                         );
                     } else {
-                        panic!("Mysterious variable at start of statement with no assign operator on line {}!", current_token.src_line);
+                        panic!("LINE {} | Mysterious variable at start of statement with no assign operator!", current_token.src_line);
                     }
 
                     self.insert_ast_token_at_end(new_token);

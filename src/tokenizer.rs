@@ -122,13 +122,13 @@ impl Tokenizer {
                 match value.as_str() {
                     "if" => WrappedToken::from_with_line(Token::If, token.src_line),
                     "while" => WrappedToken::from_with_line(Token::While, token.src_line),
-                    "else" => WrappedToken::from(Token::Else),
+                    "else" => WrappedToken::from_with_line(Token::Else, token.src_line),
                     "alloc" => WrappedToken::from_with_line(Token::Alloc, token.src_line),
                     "set" => WrappedToken::from_with_line(Token::Set, token.src_line),
                     "print" => WrappedToken::from_with_line(Token::Print, token.src_line),
                     "readln" => WrappedToken::from_with_line(Token::ReadLine, token.src_line),
-                    "true" => WrappedToken::from(Token::BoolTrue),
-                    "false" => WrappedToken::from(Token::BoolFalse),
+                    "true" => WrappedToken::from_with_line(Token::BoolTrue, token.src_line),
+                    "false" => WrappedToken::from_with_line(Token::BoolFalse, token.src_line),
                     "jump" => WrappedToken::from_with_line(Token::Jump, token.src_line),
                     "call" => WrappedToken::from_with_line(Token::SubroutineCall, token.src_line),
                     "ret" => WrappedToken::from_with_line(Token::SubroutineReturn, token.src_line),
@@ -138,22 +138,22 @@ impl Tokenizer {
             }
             Token::Symbol(value) => {
                 match value {
-                    '=' => WrappedToken::from(Token::Assign),
+                    '=' => WrappedToken::from_with_line(Token::Assign, token.src_line),
                     '{' => WrappedToken::from_with_line(Token::ScopeOpen, token.src_line),
                     '}' => WrappedToken::from_with_line(Token::ScopeClose, token.src_line),
-                    '>' => WrappedToken::from(Token::MoreThan),
-                    '<' => WrappedToken::from(Token::LessThan),
-                    ';' => WrappedToken::from(Token::LineEnd),
-                    '+' => WrappedToken::from(Token::Plus),
-                    '-' => WrappedToken::from(Token::Minus),
+                    '>' => WrappedToken::from_with_line(Token::MoreThan, token.src_line),
+                    '<' => WrappedToken::from_with_line(Token::LessThan, token.src_line),
+                    ';' => WrappedToken::from_with_line(Token::LineEnd, token.src_line),
+                    '+' => WrappedToken::from_with_line(Token::Plus, token.src_line),
+                    '-' => WrappedToken::from_with_line(Token::Minus, token.src_line),
                     ':' => WrappedToken::from_with_line(Token::Label, token.src_line),
-                    '[' => WrappedToken::from(Token::ArrayOpen),
-                    ']' => WrappedToken::from(Token::ArrayClose),
-                    '|' => WrappedToken::from(Token::ArrayAccess),
-                    '.' => WrappedToken::from(Token::LenAccess),
-                    '(' => WrappedToken::from(Token::ParensOpen),
-                    ')' => WrappedToken::from(Token::ParensClose),
-                    ',' => WrappedToken::from(Token::Comma),
+                    '[' => WrappedToken::from_with_line(Token::ArrayOpen, token.src_line),
+                    ']' => WrappedToken::from_with_line(Token::ArrayClose, token.src_line),
+                    '|' => WrappedToken::from_with_line(Token::ArrayAccess, token.src_line),
+                    '.' => WrappedToken::from_with_line(Token::LenAccess, token.src_line),
+                    '(' => WrappedToken::from_with_line(Token::ParensOpen, token.src_line),
+                    ')' => WrappedToken::from_with_line(Token::ParensClose, token.src_line),
+                    ',' => WrappedToken::from_with_line(Token::Comma, token.src_line),
                     _ => token,
                 }
             }
@@ -182,28 +182,28 @@ impl Tokenizer {
                             // comparison
                             Token::Symbol('=') => {
                                 out_tokens.truncate(out_tokens.len() - 1);
-                                out_tokens.push(WrappedToken::from(Token::Equals));
+                                out_tokens.push(WrappedToken::from_with_line(Token::Equals, token.src_line));
                             }
                             Token::Symbol('!') => {
                                 out_tokens.truncate(out_tokens.len() - 1);
-                                out_tokens.push(WrappedToken::from(Token::NotEquals));
+                                out_tokens.push(WrappedToken::from_with_line(Token::NotEquals, token.src_line));
                             }
                             Token::Symbol('>') => {
                                 out_tokens.truncate(out_tokens.len() - 1);
-                                out_tokens.push(WrappedToken::from(Token::MoreThanOrEquals));
+                                out_tokens.push(WrappedToken::from_with_line(Token::MoreThanOrEquals, token.src_line));
                             }
                             Token::Symbol('<') => {
                                 out_tokens.truncate(out_tokens.len() - 1);
-                                out_tokens.push(WrappedToken::from(Token::LessThanOrEquals));
+                                out_tokens.push(WrappedToken::from_with_line(Token::LessThanOrEquals, token.src_line));
                             }
                             // math
                             Token::Symbol('+') => {
                                 out_tokens.truncate(out_tokens.len() - 1);
-                                out_tokens.push(WrappedToken::from(Token::PlusEquals));
+                                out_tokens.push(WrappedToken::from_with_line(Token::PlusEquals, token.src_line));
                             }
                             Token::Symbol('-') => {
                                 out_tokens.truncate(out_tokens.len() - 1);
-                                out_tokens.push(WrappedToken::from(Token::MinusEquals));
+                                out_tokens.push(WrappedToken::from_with_line(Token::MinusEquals, token.src_line));
                             }
                             _ => {
                                 out_tokens.push(Tokenizer::unraw_token(token));
@@ -215,7 +215,7 @@ impl Tokenizer {
                             // subroutine call
                             Token::Symbol('-') => {
                                 out_tokens.truncate(out_tokens.len() - 1);
-                                out_tokens.push(WrappedToken::from(Token::SubroutineDirect));
+                                out_tokens.push(WrappedToken::from_with_line(Token::SubroutineDirect, token.src_line));
                             }
                             _ => {
                                 out_tokens.push(Tokenizer::unraw_token(token));
@@ -229,7 +229,7 @@ impl Tokenizer {
                                     Token::Symbol('.') => {
                                         // pop
                                         out_tokens.truncate(out_tokens.len() - 1);
-                                        out_tokens.push(WrappedToken::from(Token::PopAccess));
+                                        out_tokens.push(WrappedToken::from_with_line(Token::PopAccess, token.src_line));
                                     }
                                     _ => {
                                         // previous token was not '.' access, pop is a variable here
@@ -240,12 +240,12 @@ impl Tokenizer {
                             "popfront" => {
                                 match &tokens[token_idx - 1].token { // get and replace previous token
                                     Token::Symbol('.') => {
-                                        // pop
+                                        // popfront
                                         out_tokens.truncate(out_tokens.len() - 1);
-                                        out_tokens.push(WrappedToken::from(Token::PopFrontAccess));
+                                        out_tokens.push(WrappedToken::from_with_line(Token::PopFrontAccess, token.src_line));
                                     }
                                     _ => {
-                                        // previous token was not '.' access, pop is a variable here
+                                        // previous token was not '.' access, popfront is a variable here
                                         out_tokens.push(Tokenizer::unraw_token(token));
                                     }
                                 }
@@ -291,7 +291,7 @@ impl Tokenizer {
             self.char_idx += 1
         }
 
-        WrappedToken::from(Token::IntegerLiteral(u32::from_str_radix(&digit_str, 10).unwrap()))
+        WrappedToken::from_with_line(Token::IntegerLiteral(u32::from_str_radix(&digit_str, 10).unwrap()), self.line_idx + 1)
     }
 
     fn consume_identifier(&mut self) -> WrappedToken {
@@ -316,7 +316,7 @@ impl Tokenizer {
         }
 
         self.char_idx += 1; // leave string bounds
-        WrappedToken::from(Token::StringLiteral(literal_str))
+        WrappedToken::from_with_line(Token::StringLiteral(literal_str), self.line_idx + 1)
     }
 
     fn consume_whitespace(&mut self) -> WrappedToken {
@@ -324,7 +324,7 @@ impl Tokenizer {
             self.char_idx += 1
         }
 
-        WrappedToken::from(Token::Whitespace)
+        WrappedToken::from_with_line(Token::Whitespace, self.line_idx + 1)
     }
 
     fn consume_comment(&mut self) -> WrappedToken {
