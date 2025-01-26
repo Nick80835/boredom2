@@ -243,18 +243,26 @@ impl Interpreter {
                             Operator::LenAccess => { return WrappedType::from(Type::Integer(first_val.len() as u32)); }
                             Operator::PopAccess => {
                                 // first val is the String
-                                let ret_var = first_val.chars().last().unwrap().to_string().to_owned();
-                                self.memory_cells[first.addr.unwrap()] = Type::String(
-                                    first_val[..(first_val.len() - 1)].to_string()
-                                );
-                                return WrappedType::from_with_addr(Type::String(ret_var), first.addr);
+                                let ret_var = Type::String(first_val.chars().last().unwrap().to_string().to_owned());
+
+                                if first.addr != None {
+                                    self.memory_cells[first.addr.unwrap()] = Type::String(
+                                        first_val[..(first_val.len() - 1)].to_string()
+                                    );
+                                }
+
+                                return WrappedType::from_with_addr(ret_var, first.addr);
                             }
                             Operator::PopFrontAccess => {
-                                let ret_var = first_val.chars().next().unwrap().to_string().to_owned();
-                                self.memory_cells[first.addr.unwrap()] = Type::String(
-                                    first_val[1..(first_val.len())].to_string()
-                                );
-                                return WrappedType::from_with_addr(Type::String(ret_var), first.addr);
+                                let ret_var = Type::String(first_val.chars().next().unwrap().to_string().to_owned());
+
+                                if first.addr != None {
+                                    self.memory_cells[first.addr.unwrap()] = Type::String(
+                                        first_val[1..(first_val.len())].to_string()
+                                    );
+                                }
+
+                                return WrappedType::from_with_addr(ret_var, first.addr);
                             }
                             _ => unreachable!()
                         }
@@ -301,16 +309,24 @@ impl Interpreter {
                             Operator::PopAccess => {
                                 // first val is the Array
                                 let ret_var = first_val.last().unwrap().to_owned();
-                                self.memory_cells[first.addr.unwrap()] = Type::Array(
-                                    first_val[..(first_val.len() - 1)].to_vec()
-                                );
+
+                                if first.addr != None {
+                                    self.memory_cells[first.addr.unwrap()] = Type::Array(
+                                        first_val[..(first_val.len() - 1)].to_vec()
+                                    );
+                                }
+
                                 return WrappedType::from_with_addr(ret_var, first.addr);
                             }
                             Operator::PopFrontAccess => {
                                 let ret_var = first_val.first().unwrap().to_owned();
-                                self.memory_cells[first.addr.unwrap()] = Type::Array(
-                                    first_val[1..(first_val.len())].to_vec()
-                                );
+
+                                if first.addr != None {
+                                    self.memory_cells[first.addr.unwrap()] = Type::Array(
+                                        first_val[1..(first_val.len())].to_vec()
+                                    );
+                                }
+
                                 return WrappedType::from_with_addr(ret_var, first.addr);
                             }
                             _ => unreachable!()

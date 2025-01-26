@@ -35,6 +35,4 @@ else {
 }
 
 print "\n";
-set popfront = "hey";
-print "\n" + popfront.popfront|0|.pop|0|.pop.popfront|0|;
-print "\n" + popfront;
+print "egg".pop.popfront;

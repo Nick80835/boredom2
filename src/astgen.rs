@@ -395,15 +395,8 @@ impl ASTGenerator {
                 operators: operator_tokens
             };
         } else {
-            if tokens.len() == 0 {
-                panic!("No tokens passed to resolve_any_value!");
-            }
-
-            panic!(
-                "LINE {} | Invalid token length of {} passed to resolve_any_value!",
-                tokens.first().unwrap().src_line,
-                tokens.len(),
-            );
+            // must be 0
+            panic!("No tokens passed to resolve_any_value!");
         }
     }
     fn unpack_expression(expression: &Value) -> (Vec<Value>, Vec<Operator>) {
