@@ -205,12 +205,7 @@ impl Interpreter {
                             // math
                             Operator::Add => { return WrappedType::from(Type::String(first_val.to_string() + &second_val.to_string())); }
                             // index access
-                            Operator::ArrayAccess => {
-                                return WrappedType::from_with_addr(
-                                    Type::String(first_val.chars().nth(*second_val as usize).unwrap().to_string().to_owned()),
-                                    first.addr,
-                                );
-                            }
+                            Operator::ArrayAccess => { return WrappedType::from(Type::String(first_val.chars().nth(*second_val as usize).unwrap().to_string().to_owned())); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
@@ -251,7 +246,7 @@ impl Interpreter {
                                     );
                                 }
 
-                                return WrappedType::from_with_addr(ret_var, first.addr);
+                                return WrappedType::from(ret_var);
                             }
                             Operator::PopFrontAccess => {
                                 let ret_var = Type::String(first_val.chars().next().unwrap().to_string().to_owned());
@@ -262,7 +257,7 @@ impl Interpreter {
                                     );
                                 }
 
-                                return WrappedType::from_with_addr(ret_var, first.addr);
+                                return WrappedType::from(ret_var);
                             }
                             _ => unreachable!()
                         }
@@ -279,12 +274,7 @@ impl Interpreter {
                             // math
                             Operator::Add => { return WrappedType::from(Type::Array([first_val.to_owned(), vec![second.value].to_owned()].concat())); }
                             // index access
-                            Operator::ArrayAccess => {
-                                return WrappedType::from_with_addr(
-                                    first_val[*second_val as usize].to_owned(),
-                                    first.addr,
-                                );
-                            }
+                            Operator::ArrayAccess => { return WrappedType::from(first_val[*second_val as usize].to_owned()); }
                             _ => panic!("Invalid operator for comparison statement: {:?}", operator)
                         }
                     }
@@ -316,7 +306,7 @@ impl Interpreter {
                                     );
                                 }
 
-                                return WrappedType::from_with_addr(ret_var, first.addr);
+                                return WrappedType::from(ret_var);
                             }
                             Operator::PopFrontAccess => {
                                 let ret_var = first_val.first().unwrap().to_owned();
@@ -327,7 +317,7 @@ impl Interpreter {
                                     );
                                 }
 
-                                return WrappedType::from_with_addr(ret_var, first.addr);
+                                return WrappedType::from(ret_var);
                             }
                             _ => unreachable!()
                         }
